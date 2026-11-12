@@ -64,7 +64,7 @@ function getUser(data, userId) {
         };
         saveData(data);
     }
-    if (!data.users[userId].titles) data.users[userId].titles = ['Novice Hunter'];
+    if (!Array.isArray(data.users[userId].titles)) data.users[userId].titles = ['Novice Hunter'];
     if (!data.users[userId].equippedTitle) data.users[userId].equippedTitle = 'Novice Hunter';
     if (!data.users[userId].dailyStreak) data.users[userId].dailyStreak = 0;
     if (!data.users[userId].lastDailyTimestamp) data.users[userId].lastDailyTimestamp = 0;
@@ -97,6 +97,20 @@ function formatTierAnsi(tier) {
         default:
             return tier;
     }
+}
+
+// Helper to display title with special ANSI formatting if applicable
+function formatTitleDisplay(titleName) {
+    if (titleName === 'BETA TESTERS') {
+        return '```ansi\n\u001b[38;2;253;152;85mB\u001b[38;2;249;147;92mE\u001b[38;2;244;142;99mT\u001b[38;2;241;137;106mA\u001b[38;2;237;132;113m \u001b[38;2;233;127;120mT\u001b[38;2;229;122;127mE\u001b[38;2;225;117;134mS\u001b[38;2;221;112;141mT\u001b[38;2;217;107;148mE\u001b[38;2;213;102;155mR\u001b[38;2;209;97;162mS\u001b[0m\n```';
+    }
+    if (titleName === 'YOU SHOULD NOT PASS') {
+        return '```ansi\n\u001b[38;2;255;0;0mY\u001b[38;2;255;84;0mO\u001b[38;2;255;170;0mU\u001b[38;2;255;255;0m \u001b[38;2;170;255;0mS\u001b[38;2;84;255;0mH\u001b[38;2;0;255;0mO\u001b[38;2;0;255;85mU\u001b[38;2;0;255;169mL\u001b[38;2;0;255;255mD\u001b[38;2;0;169;255m \u001b[38;2;0;84;255mN\u001b[38;2;0;0;255mO\u001b[38;2;84;0;255mT\u001b[38;2;170;0;255m \u001b[38;2;255;0;255mP\u001b[38;2;255;0;170mA\u001b[38;2;255;0;84mS\u001b[38;2;255;0;0mS\u001b[0m\n```';
+    }
+    if (titleName === 'Godly Deity') {
+        return '```ansi\n\u001b[1;31m👑 \u001b[1;33m𝔾\u001b[1;32m𝕆\u001b[1;36m𝔻\u001b[1;34m𝕃\u001b[1;35m𝕐 \u001b[1;31m𝔻\u001b[1;33m𝔼\u001b[1;32m𝕀\u001b[1;36m𝕋\u001b[1;34m𝕐 \u001b[1;35m👑\u001b[0m\n```';
+    }
+    return `\`${titleName}\``;
 }
 
 // Animal Database with OwO-bot style realistic emojis
@@ -220,6 +234,16 @@ const commands = [
     new SlashCommandBuilder().setName('admin-give-animal').setDescription('Admin: Give a specific animal to collection').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addUserOption(o => o.setName('target').setDescription('Target user').setRequired(true))
         .addStringOption(o => o.setName('type').setDescription('Animal name').setRequired(true)),
+    new SlashCommandBuilder().setName('admin-give-title').setDescription('Admin: Award an exclusive title to a user').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addUserOption(o => o.setName('target').setDescription('Target user').setRequired(true))
+        .addStringOption(o => o.setName('title').setDescription('Title name to grant').setRequired(true)
+            .addChoices(
+                { name: 'BETA TESTERS', value: 'BETA TESTERS' },
+                { name: 'YOU SHOULD NOT PASS', value: 'YOU SHOULD NOT PASS' },
+                { name: 'Godly Deity', value: 'Godly Deity' },
+                { name: 'Apex Predator', value: 'Apex Predator' },
+                { name: 'Wild Tracker', value: 'Wild Tracker' }
+            )),
     new SlashCommandBuilder().setName('admin-luck-event').setDescription('Admin: Set global luck event bonus').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addNumberOption(o => o.setName('amount').setDescription('Luck multiplier bonus').setRequired(true)),
     new SlashCommandBuilder().setName('admin-catching-rate-event').setDescription('Admin: Set global catch rate boost').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
@@ -429,13 +453,22 @@ client.on('interactionCreate', async interaction => {
             if (!user.collection[caught.name]) user.collection[caught.name] = 0;
             user.collection[caught.name]++;
 
-            // Title unlocks
+            // Milestone Title Unlocks (Notice BETA TESTERS and YOU SHOULD NOT PASS are NOT auto-unlocked here)
+            let newlyUnlockedTitle = null;
             let totalCaughtCount = Object.values(user.collection).reduce((a, b) => a + b, 0);
-            if (totalCaughtCount >= 25 && !user.titles.includes('Wild Tracker')) user.titles.push('Wild Tracker');
-            if (caught.rank >= 6 && !user.titles.includes('Apex Predator')) user.titles.push('Apex Predator');
-            if (caught.name === 'Snowman' && !user.titles.includes('Godly Deity')) user.titles.push('Godly Deity');
-            if (!user.titles.includes('BEAST TESTER')) user.titles.push('BEAST TESTER');
-            if (!user.titles.includes('YOU SHOULD NOT PASS')) user.titles.push('YOU SHOULD NOT PASS');
+
+            if (totalCaughtCount >= 25 && !user.titles.includes('Wild Tracker')) {
+                user.titles.push('Wild Tracker');
+                newlyUnlockedTitle = 'Wild Tracker';
+            }
+            if (caught.rank >= 6 && !user.titles.includes('Apex Predator')) {
+                user.titles.push('Apex Predator');
+                newlyUnlockedTitle = 'Apex Predator';
+            }
+            if (caught.name === 'Snowman' && !user.titles.includes('Godly Deity')) {
+                user.titles.push('Godly Deity');
+                newlyUnlockedTitle = 'Godly Deity';
+            }
 
             saveData(data);
 
@@ -448,6 +481,14 @@ client.on('interactionCreate', async interaction => {
                     { name: 'Reward', value: `🪙 ${caught.reward.toLocaleString()} coins`, inline: true },
                     { name: 'Total Caught', value: `${user.collection[caught.name]}x`, inline: true }
                 );
+
+            if (newlyUnlockedTitle) {
+                embed.addFields({ 
+                    name: '🎉 NEW TITLE UNLOCKED!', 
+                    value: `You unlocked **${newlyUnlockedTitle}**! Equip it anytime using \`/titles equip:${newlyUnlockedTitle}\`.` 
+                });
+            }
+
             return interaction.reply({ embeds: [embed] });
         }
 
@@ -477,22 +518,23 @@ client.on('interactionCreate', async interaction => {
             const equipName = interaction.options.getString('equip');
             
             if (equipName) {
-                if (!user.titles.includes(equipName)) {
+                const matchedTitle = user.titles.find(t => t.toLowerCase() === equipName.toLowerCase());
+                if (!matchedTitle) {
                     return interaction.reply({ content: `❌ You have not unlocked the title **${equipName}** yet!`, ephemeral: true });
                 }
-                user.equippedTitle = equipName;
+                user.equippedTitle = matchedTitle;
                 saveData(data);
-                return interaction.reply({ content: `✅ Successfully equipped your new title: **${equipName}**!`, ephemeral: true });
+                return interaction.reply({ content: `✅ Successfully equipped your new title: **${matchedTitle}**!`, ephemeral: true });
             }
 
             const embed = new EmbedBuilder()
                 .setTitle(`🏆 ${interaction.user.username}'s Titles`)
                 .setColor('#ffd700')
-                .setDescription('Here are your unlocked titles. Use `/titles equip [title]` to change your active title!\n\n**Special ANSI Showcase Titles:**\n' +
-                    '```ansi\n\u001b[38;2;64;222;64m\u001b[38;2;222;64;64m\u001b[38;2;253;152;85mB\u001b[38;2;222;64;64m\u001b[38;2;249;147;92mE\u001b[38;2;222;64;64m\u001b[38;2;244;142;99mT\u001b[38;2;222;64;64m\u001b[38;2;241;137;106mA\u001b[38;2;222;64;64m\u001b[38;2;237;132;113m \u001b[38;2;222;64;64m\u001b[38;2;233;127;120mT\u001b[38;2;222;64;64m\u001b[38;2;229;122;127mE\u001b[38;2;222;64;64m\u001b[38;2;225;117;134mS\u001b[38;2;222;64;64m\u001b[38;2;221;112;141mT\u001b[38;2;222;64;64m\u001b[38;2;217;107;148mE\u001b[38;2;222;64;64m\u001b[38;2;213;102;155mR\u001b[38;2;222;64;64m\u001b[38;2;209;97;162mS\n\u001b[0m\u001b[38;2;222;64;64m\u001b[0m\u001b[38;2;64;222;64m\u001b[0m\n```\n' +
-                    '```ansi\n\u001b[38;2;255;0;0mY\u001b[38;2;255;84;0mO\u001b[38;2;255;170;0mU\u001b[38;2;255;255;0m \u001b[38;2;170;255;0mS\u001b[38;2;84;255;0mH\u001b[38;2;0;255;0mO\u001b[38;2;0;255;85mU\u001b[38;2;0;255;169mL\u001b[38;2;0;255;255mD\u001b[38;2;0;169;255m \u001b[38;2;0;84;255mN\u001b[38;2;0;0;255mO\u001b[38;2;84;0;255mT\u001b[38;2;170;0;255m \u001b[38;2;255;0;255mP\u001b[38;2;255;0;170mA\u001b[38;2;255;0;84mS\u001b[38;2;255;0;0mS\u001b[0m\n```');
+                .setDescription('Use `/titles equip [title]` to equip any unlocked title onto your profile!\n\n**Exclusive Special ANSI Titles:**\n' +
+                    formatTitleDisplay('BETA TESTERS') + '\n' +
+                    formatTitleDisplay('YOU SHOULD NOT PASS'));
 
-            const list = user.titles.map(t => `${t === user.equippedTitle ? '🟢 **[Equipped]**' : '🔹'} ${t}`).join('\n');
+            const list = user.titles.map(t => `${t === user.equippedTitle ? '🟢 **[Equipped]**' : '🔹'} **${t}**`).join('\n');
             embed.addFields({ name: 'Your Unlocked Titles', value: list });
 
             return interaction.reply({ embeds: [embed] });
@@ -518,13 +560,14 @@ client.on('interactionCreate', async interaction => {
             }
 
             const bestCaughtDisplay = bestRank !== -1 ? `${bestBadge} **${bestAnimalName}**` : 'No hunts yet';
+            const activeTitle = tData.equippedTitle || 'Novice Hunter';
 
             const embed = new EmbedBuilder()
                 .setColor('#5865F2')
                 .setThumbnail(target.displayAvatarURL({ dynamic: true }))
-                .setTitle(`👤 User Profile: ${target.username}`)
+                .setTitle(`👤 ${target.username} • [${activeTitle}]`)
                 .addFields(
-                    { name: '🏷️ Active Title', value: `\`${tData.equippedTitle || 'Novice Hunter'}\``, inline: false },
+                    { name: '🏷️ Equipped Title Showcase', value: formatTitleDisplay(activeTitle), inline: false },
                     { name: '🔥 Daily Streak', value: `**${tData.dailyStreak || 0} Days**`, inline: true },
                     { name: '🎯 Total Animal Hunt', value: `**${totalHuntCount.toLocaleString()}** animals`, inline: true },
                     { name: '👑 Best Caught', value: bestCaughtDisplay, inline: true },
@@ -629,9 +672,31 @@ client.on('interactionCreate', async interaction => {
             const targetData = getUser(data, target.id);
             if (!targetData.collection[foundAnimal.name]) targetData.collection[foundAnimal.name] = 0;
             targetData.collection[foundAnimal.name]++;
+
+            // Also unlock Godly Deity if admin grants Snowman
+            if (foundAnimal.name === 'Snowman' && !targetData.titles.includes('Godly Deity')) {
+                targetData.titles.push('Godly Deity');
+            }
+            if (foundAnimal.rank >= 6 && !targetData.titles.includes('Apex Predator')) {
+                targetData.titles.push('Apex Predator');
+            }
+
+            saveData(data);
+            return interaction.reply({ content: `🛠️ Admin: Added 1x ${foundAnimal.badge} **${foundAnimal.name}** (${foundAnimal.tier}) to ${target.tag}'s collection!`, ephemeral: true });
+        }
+
+        else if (commandName === 'admin-give-title') {
+            const target = interaction.options.getUser('target');
+            const titleToGrant = interaction.options.getString('title');
+            const targetData = getUser(data, target.id);
+
+            if (!targetData.titles.includes(titleToGrant)) {
+                targetData.titles.push(titleToGrant);
+            }
+            targetData.equippedTitle = titleToGrant; // Automatically equips it for convenience
             saveData(data);
 
-            return interaction.reply({ content: `🛠️ Admin: Added 1x ${foundAnimal.badge} **${foundAnimal.name}** (${foundAnimal.tier}) to ${target.tag}'s collection!`, ephemeral: true });
+            return interaction.reply({ content: `🏆 Admin: Awarded and equipped the exclusive title **${titleToGrant}** for ${target.tag}!`, ephemeral: true });
         }
 
         else if (commandName === 'admin-luck-event') {
