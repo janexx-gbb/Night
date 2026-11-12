@@ -1,7 +1,7 @@
 {
   "name": "discord-economy-bot",
-  "version": "1.0.0",
-  "description": "Discord bot with economy, market, hunting, fun, and admin modules",
+  "version": "2.0.0",
+  "description": "Advanced Discord Economy and Hunting Bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
