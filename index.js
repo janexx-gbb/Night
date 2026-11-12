@@ -56,78 +56,87 @@ function getUser(data, userId) {
             bank: 1000, 
             inventory: [], 
             collection: {}, 
-            cooldowns: {} 
+            cooldowns: {},
+            titles: ['Novice Hunter'],
+            equippedTitle: 'Novice Hunter',
+            dailyStreak: 0,
+            lastDailyTimestamp: 0
         };
         saveData(data);
     }
+    if (!data.users[userId].titles) data.users[userId].titles = ['Novice Hunter'];
+    if (!data.users[userId].equippedTitle) data.users[userId].equippedTitle = 'Novice Hunter';
+    if (!data.users[userId].dailyStreak) data.users[userId].dailyStreak = 0;
+    if (!data.users[userId].lastDailyTimestamp) data.users[userId].lastDailyTimestamp = 0;
     return data.users[userId];
 }
 
-// Discord ANSI Color Wrapper for real colored text inside Embeds
+// Custom Stylized Fonts + ANSI Colors for Tiers
 function formatTierAnsi(tier) {
     switch (tier) {
-        case 'Common':    return '```ansi\n\u001b[1;31mCommon\u001b[0m\n```'; // Red
-        case 'Uncommon':  return '```ansi\n\u001b[1;33mUncommon\u001b[0m\n```'; // Yellow
-        case 'Rare':      return '```ansi\n\u001b[1;34mRare\u001b[0m\n```'; // Blue
-        case 'Epic':      return '```ansi\n\u001b[1;35mEpic\u001b[0m\n```'; // Violet/Magenta
-        case 'Legendary': return '```ansi\n\u001b[0;33mLegendary\u001b[0m\n```'; // Orange/Gold
-        case 'Mythical':  return '```ansi\n\u001b[1;36mMythical\u001b[0m\n```'; // Neon Blue/Cyan
-        case 'S+ Tier':   return '```ansi\n\u001b[0;36mS+ Tier\u001b[0m\n```'; // Neon Skyblue
-        case 'SS+ Tier':  return '```ansi\n\u001b[1;35mSS+ Tier\u001b[0m\n```'; // Neon Pink
-        case 'SSS+ Tier': return '```ansi\n\u001b[0;35mSSS+ Tier\u001b[0m\n```'; // Neon Violet
-        case 'GOD Tier':  return '```ansi\n\u001b[1;31mG\u001b[1;33mO\u001b[1;32mD\u001b[1;36m \u001b[1;34mT\u001b[1;35mi\u001b[1;31me\u001b[1;33mr\u001b[0m\n```'; // Rainbow GOD Tier
-        default:          return tier;
+        case 'Common':
+            return '```ansi\n\u001b[1;31m𝗖𝗢𝗠𝗠𝗢𝗡\u001b[0m\n```';
+        case 'Uncommon':
+            return '```ansi\n\u001b[1;33m𝐔𝐍𝐂𝐎𝐌𝐌𝐎𝐍\u001b[0m\n```';
+        case 'Rare':
+            return '```ansi\n\u001b[1;34m𝙍𝘼𝙍𝙀\u001b[0m\n```';
+        case 'Epic':
+            return '```ansi\n\u001b[1;35m𝔼ℙ𝕀ℂ\u001b[0m\n```';
+        case 'Legendary':
+            return '```ansi\n\u001b[0;33m★ 𝐋𝐄𝐆𝐄𝐍𝐃𝐀𝐑𝐘 ★\u001b[0m\n```';
+        case 'Mythical':
+            return '```ansi\n\u001b[1;36m𝔐𝔜𝔗ℌℑℭ𝔄𝔏\u001b[0m\n```';
+        case 'S+ Tier':
+            return '```ansi\n\u001b[0;36m【 𝗦+ 𝗧𝗜𝗘𝗥 】\u001b[0m\n```';
+        case 'SS+ Tier':
+            return '```ansi\n\u001b[1;35m《 𝐒𝐒+ 𝐓𝐈𝐄𝐑 》\u001b[0m\n```';
+        case 'SSS+ Tier':
+            return '```ansi\n\u001b[0;35m꧁ 𝕾𝕾𝕾+ 𝕿𝕴𝕰𝕽 ꧂\u001b[0m\n```';
+        case 'GOD Tier':
+            return '```ansi\n\u001b[1;31m👑 \u001b[1;33m𝔾\u001b[1;32m𝕆\u001b[1;36m𝔻 \u001b[1;34m𝕋\u001b[1;35m𝕀\u001b[1;31m𝔼\u001b[1;33mℝ \u001b[1;32m👑\u001b[0m\n```';
+        default:
+            return tier;
     }
 }
 
-// Rarity rank values for sorting (1 = lowest, 10 = highest)
+// Animal Database with OwO-bot style realistic emojis
 const HUNT_ANIMALS = [
-    // Common (Hunt Rate 85%)
-    { name: 'Worm', tier: 'Common', rank: 1, badge: '🔴', rate: 0.85, reward: 50 },
-    { name: 'Dog', tier: 'Common', rank: 1, badge: '🔴', rate: 0.85, reward: 60 },
-    { name: 'Bird', tier: 'Common', rank: 1, badge: '🔴', rate: 0.85, reward: 60 },
-    { name: 'Cat', tier: 'Common', rank: 1, badge: '🔴', rate: 0.85, reward: 60 },
-    { name: 'Butterfly', tier: 'Common', rank: 1, badge: '🔴', rate: 0.85, reward: 40 },
-    { name: 'Snail', tier: 'Common', rank: 1, badge: '🔴', rate: 0.85, reward: 40 },
-    // Uncommon (Hunt Rate 50%)
-    { name: 'Bee', tier: 'Uncommon', rank: 2, badge: '🟡', rate: 0.50, reward: 120 },
-    { name: 'Mouse', tier: 'Uncommon', rank: 2, badge: '🟡', rate: 0.50, reward: 130 },
-    { name: 'Rabbit', tier: 'Uncommon', rank: 2, badge: '🟡', rate: 0.50, reward: 150 },
-    { name: 'Frog', tier: 'Uncommon', rank: 2, badge: '🟡', rate: 0.50, reward: 140 },
-    { name: 'Fish', tier: 'Uncommon', rank: 2, badge: '🟡', rate: 0.50, reward: 150 },
-    // Rare (Hunt Rate 25%)
-    { name: 'Cow', tier: 'Rare', rank: 3, badge: '🔵', rate: 0.25, reward: 400 },
-    { name: 'Pig', tier: 'Rare', rank: 3, badge: '🔵', rate: 0.25, reward: 350 },
-    { name: 'Kangaroo', tier: 'Rare', rank: 3, badge: '🔵', rate: 0.25, reward: 500 },
-    { name: 'Bear', tier: 'Rare', rank: 3, badge: '🔵', rate: 0.25, reward: 600 },
-    { name: 'Panda', tier: 'Rare', rank: 3, badge: '🔵', rate: 0.25, reward: 650 },
-    // Epic (Hunt Rate 15%)
-    { name: 'Whale', tier: 'Epic', rank: 4, badge: '🟣', rate: 0.15, reward: 1500 },
-    { name: 'Penguin', tier: 'Epic', rank: 4, badge: '🟣', rate: 0.15, reward: 1200 },
-    { name: 'Camel', tier: 'Epic', rank: 4, badge: '🟣', rate: 0.15, reward: 1300 },
-    { name: 'Dove', tier: 'Epic', rank: 4, badge: '🟣', rate: 0.15, reward: 1100 },
-    // Legendary (Hunt Rate 10%)
-    { name: 'Elephant', tier: 'Legendary', rank: 5, badge: '🟠', rate: 0.10, reward: 4000 },
-    { name: 'Crocodile', tier: 'Legendary', rank: 5, badge: '🟠', rate: 0.10, reward: 4500 },
-    { name: 'Crow', tier: 'Legendary', rank: 5, badge: '🟠', rate: 0.10, reward: 3500 },
-    { name: 'Tiger', tier: 'Legendary', rank: 5, badge: '🟠', rate: 0.10, reward: 5000 },
-    // Mythical (Hunt Rate 1%)
-    { name: 'Deer', tier: 'Mythical', rank: 6, badge: '🔷', rate: 0.01, reward: 12000 },
-    { name: 'Lion', tier: 'Mythical', rank: 6, badge: '🔷', rate: 0.01, reward: 15000 },
-    // S+ Tier (Hunt Rate 5%)
-    { name: 'Ghost', tier: 'S+ Tier', rank: 7, badge: '🩵', rate: 0.05, reward: 35000 },
-    { name: 'Skeleton', tier: 'S+ Tier', rank: 7, badge: '🩵', rate: 0.05, reward: 30000 },
-    // SS+ Tier (Hunt Rate 0.5%)
-    { name: 'Dragon', tier: 'SS+ Tier', rank: 8, badge: '🩷', rate: 0.005, reward: 50000 },
-    { name: 'Phantom Ghost', tier: 'SS+ Tier', rank: 8, badge: '🩷', rate: 0.005, reward: 55000 },
-    // SSS+ Tier (Hunt Rate 0.1%)
-    { name: 'Unicorn', tier: 'SSS+ Tier', rank: 9, badge: '🔮', rate: 0.001, reward: 120000 },
-    { name: 'Dinosaur', tier: 'SSS+ Tier', rank: 9, badge: '🔮', rate: 0.001, reward: 150000 },
-    // GOD Tier (Hunt Rate 0.01%)
-    { name: 'Snowman', tier: 'GOD Tier', rank: 10, badge: '🌈', rate: 0.0001, reward: 500000 }
+    { name: 'Worm', tier: 'Common', rank: 1, badge: '🐛', rate: 0.85, reward: 50 },
+    { name: 'Dog', tier: 'Common', rank: 1, badge: '🐕', rate: 0.85, reward: 60 },
+    { name: 'Bird', tier: 'Common', rank: 1, badge: '🐦', rate: 0.85, reward: 60 },
+    { name: 'Cat', tier: 'Common', rank: 1, badge: '🐈', rate: 0.85, reward: 60 },
+    { name: 'Butterfly', tier: 'Common', rank: 1, badge: '🦋', rate: 0.85, reward: 40 },
+    { name: 'Snail', tier: 'Common', rank: 1, badge: '🐌', rate: 0.85, reward: 40 },
+    { name: 'Bee', tier: 'Uncommon', rank: 2, badge: '🐝', rate: 0.50, reward: 120 },
+    { name: 'Mouse', tier: 'Uncommon', rank: 2, badge: '🐁', rate: 0.50, reward: 130 },
+    { name: 'Rabbit', tier: 'Uncommon', rank: 2, badge: '🐇', rate: 0.50, reward: 150 },
+    { name: 'Frog', tier: 'Uncommon', rank: 2, badge: '🐸', rate: 0.50, reward: 140 },
+    { name: 'Fish', tier: 'Uncommon', rank: 2, badge: '🐟', rate: 0.50, reward: 150 },
+    { name: 'Cow', tier: 'Rare', rank: 3, badge: '🐄', rate: 0.25, reward: 400 },
+    { name: 'Pig', tier: 'Rare', rank: 3, badge: '🐖', rate: 0.25, reward: 350 },
+    { name: 'Kangaroo', tier: 'Rare', rank: 3, badge: '🦘', rate: 0.25, reward: 500 },
+    { name: 'Bear', tier: 'Rare', rank: 3, badge: '🐻', rate: 0.25, reward: 600 },
+    { name: 'Panda', tier: 'Rare', rank: 3, badge: '🐼', rate: 0.25, reward: 650 },
+    { name: 'Whale', tier: 'Epic', rank: 4, badge: '🐋', rate: 0.15, reward: 1500 },
+    { name: 'Penguin', tier: 'Epic', rank: 4, badge: '🐧', rate: 0.15, reward: 1200 },
+    { name: 'Camel', tier: 'Epic', rank: 4, badge: '🐫', rate: 0.15, reward: 1300 },
+    { name: 'Dove', tier: 'Epic', rank: 4, badge: '🕊️', rate: 0.15, reward: 1100 },
+    { name: 'Elephant', tier: 'Legendary', rank: 5, badge: '🐘', rate: 0.10, reward: 4000 },
+    { name: 'Crocodile', tier: 'Legendary', rank: 5, badge: '🐊', rate: 0.10, reward: 4500 },
+    { name: 'Crow', tier: 'Legendary', rank: 5, badge: '🐦‍⬛', rate: 0.10, reward: 3500 },
+    { name: 'Tiger', tier: 'Legendary', rank: 5, badge: '🐅', rate: 0.10, reward: 5000 },
+    { name: 'Deer', tier: 'Mythical', rank: 6, badge: '🦌', rate: 0.01, reward: 12000 },
+    { name: 'Lion', tier: 'Mythical', rank: 6, badge: '🦁', rate: 0.01, reward: 15000 },
+    { name: 'Ghost', tier: 'S+ Tier', rank: 7, badge: '👻', rate: 0.05, reward: 35000 },
+    { name: 'Skeleton', tier: 'S+ Tier', rank: 7, badge: '💀', rate: 0.05, reward: 30000 },
+    { name: 'Dragon', tier: 'SS+ Tier', rank: 8, badge: '🐉', rate: 0.005, reward: 50000 },
+    { name: 'Phantom Ghost', tier: 'SS+ Tier', rank: 8, badge: '🥷', rate: 0.005, reward: 55000 },
+    { name: 'Unicorn', tier: 'SSS+ Tier', rank: 9, badge: '🦄', rate: 0.001, reward: 120000 },
+    { name: 'Dinosaur', tier: 'SSS+ Tier', rank: 9, badge: '🦖', rate: 0.001, reward: 150000 },
+    { name: 'Snowman', tier: 'GOD Tier', rank: 10, badge: '⛄', rate: 0.0001, reward: 500000 }
 ];
 
-// Helper to build sorted collection embed & sorting buttons
+// Interactive Collection Display Builder
 function buildCollectionDisplay(userObj, username, userId, sortBy = 'rarity') {
     const embed = new EmbedBuilder()
         .setTitle(`📜 ${username}'s Animal Collection`)
@@ -157,24 +166,15 @@ function buildCollectionDisplay(userObj, username, userId, sortBy = 'rarity') {
     embed.setDescription(lines.join('\n'));
 
     const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId(`col_sort_rarity_${userId}`)
-            .setLabel('Sort: Rarity')
-            .setStyle(sortBy === 'rarity' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setCustomId(`col_sort_name_${userId}`)
-            .setLabel('Sort: Name')
-            .setStyle(sortBy === 'name' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        new ButtonBuilder()
-            .setCustomId(`col_sort_total_${userId}`)
-            .setLabel('Sort: Total Caught')
-            .setStyle(sortBy === 'total' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId(`col_sort_rarity_${userId}`).setLabel('Sort: Rarity').setStyle(sortBy === 'rarity' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`col_sort_name_${userId}`).setLabel('Sort: Name').setStyle(sortBy === 'name' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId(`col_sort_total_${userId}`).setLabel('Sort: Total Caught').setStyle(sortBy === 'total' ? ButtonStyle.Primary : ButtonStyle.Secondary)
     );
 
     return { embeds: [embed], components: [row] };
 }
 
-// Slash Commands Registration
+// Slash Commands Setup
 const commands = [
     new SlashCommandBuilder().setName('balance').setDescription('Check wallet and bank balance.')
         .addUserOption(o => o.setName('user').setDescription('User to check').setRequired(false)),
@@ -193,6 +193,10 @@ const commands = [
     new SlashCommandBuilder().setName('hunt').setDescription('Go hunting for creatures and build your collection!'),
     new SlashCommandBuilder().setName('collection').setDescription('View and sort your hunted animal collection.'),
     new SlashCommandBuilder().setName('inventory').setDescription('View your item inventory and charms.'),
+    new SlashCommandBuilder().setName('titles').setDescription('View and equip your unlocked profile titles.')
+        .addStringOption(o => o.setName('equip').setDescription('Exact title name to equip').setRequired(false)),
+    new SlashCommandBuilder().setName('profiles').setDescription('View detailed user profile stats, streak, best catch, and title.')
+        .addUserOption(o => o.setName('user').setDescription('User profile to view').setRequired(false)),
     new SlashCommandBuilder().setName('bank').setDescription('Deposit or withdraw coins from your bank.')
         .addStringOption(o => o.setName('action').setDescription('deposit or withdraw').setRequired(true).addChoices({name:'Deposit', value:'deposit'}, {name:'Withdraw', value:'withdraw'}))
         .addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true)),
@@ -229,7 +233,7 @@ client.once('ready', async () => {
     console.log('Slash commands synchronized.');
 });
 
-// Enforces a 2-second cooldown
+// 2-second Cooldown Helper
 function checkCooldown(user, commandName, seconds = 2) {
     const now = Date.now();
     if (!user.cooldowns) user.cooldowns = {};
@@ -242,11 +246,11 @@ function checkCooldown(user, commandName, seconds = 2) {
 }
 
 client.on('interactionCreate', async interaction => {
-    // Handle Collection Sort Buttons
+    // Handle Collection Sorting Buttons
     if (interaction.isButton()) {
         if (interaction.customId.startsWith('col_sort_')) {
             const parts = interaction.customId.split('_');
-            const sortType = parts[2]; // rarity, name, or total
+            const sortType = parts[2];
             const targetUserId = parts[3];
 
             if (interaction.user.id !== targetUserId) {
@@ -282,7 +286,7 @@ client.on('interactionCreate', async interaction => {
             const tData = getUser(data, target.id);
             const embed = new EmbedBuilder()
                 .setColor('#0099ff')
-                .setTitle(`💰 Balance for ${target.username}`)
+                .setTitle(`💰 Balance for ${target.username} [${tData.equippedTitle || 'Novice Hunter'}]`)
                 .addFields(
                     { name: 'Wallet', value: `🪙 ${tData.wallet.toLocaleString()}`, inline: true },
                     { name: 'Bank', value: `🏦 ${tData.bank.toLocaleString()}`, inline: true }
@@ -293,8 +297,18 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'beg') {
             const amt = Math.floor(Math.random() * 80) + 10;
             user.wallet += amt;
+            
+            const now = Date.now();
+            const dayInMs = 86400000;
+            if (now - user.lastDailyTimestamp > dayInMs * 2) {
+                user.dailyStreak = 1;
+            } else if (now - user.lastDailyTimestamp >= dayInMs) {
+                user.dailyStreak += 1;
+            }
+            user.lastDailyTimestamp = now;
+
             saveData(data);
-            return interaction.reply(`🤲 You begged and received **${amt} coins**.`);
+            return interaction.reply(`🤲 You begged and received **${amt} coins**. (Streak: 🔥 ${user.dailyStreak} days)`);
         }
 
         else if (commandName === 'work') {
@@ -414,12 +428,21 @@ client.on('interactionCreate', async interaction => {
             user.wallet += caught.reward;
             if (!user.collection[caught.name]) user.collection[caught.name] = 0;
             user.collection[caught.name]++;
+
+            // Title unlocks
+            let totalCaughtCount = Object.values(user.collection).reduce((a, b) => a + b, 0);
+            if (totalCaughtCount >= 25 && !user.titles.includes('Wild Tracker')) user.titles.push('Wild Tracker');
+            if (caught.rank >= 6 && !user.titles.includes('Apex Predator')) user.titles.push('Apex Predator');
+            if (caught.name === 'Snowman' && !user.titles.includes('Godly Deity')) user.titles.push('Godly Deity');
+            if (!user.titles.includes('BEAST TESTER')) user.titles.push('BEAST TESTER');
+            if (!user.titles.includes('YOU SHOULD NOT PASS')) user.titles.push('YOU SHOULD NOT PASS');
+
             saveData(data);
 
             const embed = new EmbedBuilder()
                 .setTitle('🎯 Hunting Expedition')
                 .setColor('#00ff88')
-                .setDescription(`You went hunting and successfully caught a **${caught.name}**!`)
+                .setDescription(`You went hunting and successfully caught a ${caught.badge} **${caught.name}**!`)
                 .addFields(
                     { name: 'Rarity Tier', value: formatTierAnsi(caught.tier), inline: true },
                     { name: 'Reward', value: `🪙 ${caught.reward.toLocaleString()} coins`, inline: true },
@@ -446,6 +469,70 @@ client.on('interactionCreate', async interaction => {
                 }
                 embed.setDescription(desc);
             }
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        // --- TITLES ---
+        else if (commandName === 'titles') {
+            const equipName = interaction.options.getString('equip');
+            
+            if (equipName) {
+                if (!user.titles.includes(equipName)) {
+                    return interaction.reply({ content: `❌ You have not unlocked the title **${equipName}** yet!`, ephemeral: true });
+                }
+                user.equippedTitle = equipName;
+                saveData(data);
+                return interaction.reply({ content: `✅ Successfully equipped your new title: **${equipName}**!`, ephemeral: true });
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle(`🏆 ${interaction.user.username}'s Titles`)
+                .setColor('#ffd700')
+                .setDescription('Here are your unlocked titles. Use `/titles equip [title]` to change your active title!\n\n**Special ANSI Showcase Titles:**\n' +
+                    '```ansi\n\u001b[38;2;64;222;64m\u001b[38;2;222;64;64m\u001b[38;2;253;152;85mB\u001b[38;2;222;64;64m\u001b[38;2;249;147;92mE\u001b[38;2;222;64;64m\u001b[38;2;244;142;99mT\u001b[38;2;222;64;64m\u001b[38;2;241;137;106mA\u001b[38;2;222;64;64m\u001b[38;2;237;132;113m \u001b[38;2;222;64;64m\u001b[38;2;233;127;120mT\u001b[38;2;222;64;64m\u001b[38;2;229;122;127mE\u001b[38;2;222;64;64m\u001b[38;2;225;117;134mS\u001b[38;2;222;64;64m\u001b[38;2;221;112;141mT\u001b[38;2;222;64;64m\u001b[38;2;217;107;148mE\u001b[38;2;222;64;64m\u001b[38;2;213;102;155mR\u001b[38;2;222;64;64m\u001b[38;2;209;97;162mS\n\u001b[0m\u001b[38;2;222;64;64m\u001b[0m\u001b[38;2;64;222;64m\u001b[0m\n```\n' +
+                    '```ansi\n\u001b[38;2;255;0;0mY\u001b[38;2;255;84;0mO\u001b[38;2;255;170;0mU\u001b[38;2;255;255;0m \u001b[38;2;170;255;0mS\u001b[38;2;84;255;0mH\u001b[38;2;0;255;0mO\u001b[38;2;0;255;85mU\u001b[38;2;0;255;169mL\u001b[38;2;0;255;255mD\u001b[38;2;0;169;255m \u001b[38;2;0;84;255mN\u001b[38;2;0;0;255mO\u001b[38;2;84;0;255mT\u001b[38;2;170;0;255m \u001b[38;2;255;0;255mP\u001b[38;2;255;0;170mA\u001b[38;2;255;0;84mS\u001b[38;2;255;0;0mS\u001b[0m\n```');
+
+            const list = user.titles.map(t => `${t === user.equippedTitle ? '🟢 **[Equipped]**' : '🔹'} ${t}`).join('\n');
+            embed.addFields({ name: 'Your Unlocked Titles', value: list });
+
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        // --- PROFILES ---
+        else if (commandName === 'profiles') {
+            const target = interaction.options.getUser('user') || interaction.user;
+            const tData = getUser(data, target.id);
+
+            const totalHuntCount = Object.values(tData.collection).reduce((a, b) => a + b, 0);
+
+            let bestAnimalName = 'None';
+            let bestRank = -1;
+            let bestBadge = '⚪';
+            for (const [animalName] of Object.entries(tData.collection)) {
+                const found = HUNT_ANIMALS.find(a => a.name === animalName);
+                if (found && found.rank > bestRank) {
+                    bestRank = found.rank;
+                    bestAnimalName = found.name;
+                    bestBadge = found.badge;
+                }
+            }
+
+            const bestCaughtDisplay = bestRank !== -1 ? `${bestBadge} **${bestAnimalName}**` : 'No hunts yet';
+
+            const embed = new EmbedBuilder()
+                .setColor('#5865F2')
+                .setThumbnail(target.displayAvatarURL({ dynamic: true }))
+                .setTitle(`👤 User Profile: ${target.username}`)
+                .addFields(
+                    { name: '🏷️ Active Title', value: `\`${tData.equippedTitle || 'Novice Hunter'}\``, inline: false },
+                    { name: '🔥 Daily Streak', value: `**${tData.dailyStreak || 0} Days**`, inline: true },
+                    { name: '🎯 Total Animal Hunt', value: `**${totalHuntCount.toLocaleString()}** animals`, inline: true },
+                    { name: '👑 Best Caught', value: bestCaughtDisplay, inline: true },
+                    { name: '🪙 Wallet', value: `🪙 ${tData.wallet.toLocaleString()}`, inline: true },
+                    { name: '🏦 Bank', value: `🏦 ${tData.bank.toLocaleString()}`, inline: true }
+                )
+                .setTimestamp();
+
             return interaction.reply({ embeds: [embed] });
         }
 
@@ -521,7 +608,7 @@ client.on('interactionCreate', async interaction => {
 
         else if (commandName === 'admin-reset') {
             const target = interaction.options.getUser('target');
-            data.users[target.id] = { wallet: 500, bank: 1000, inventory: [], collection: {}, cooldowns: {} };
+            data.users[target.id] = { wallet: 500, bank: 1000, inventory: [], collection: {}, cooldowns: {}, titles: ['Novice Hunter'], equippedTitle: 'Novice Hunter', dailyStreak: 0, lastDailyTimestamp: 0 };
             saveData(data);
             return interaction.reply({ content: `🛠️ Admin: Reset account data for ${target.tag}.`, ephemeral: true });
         }
@@ -544,7 +631,7 @@ client.on('interactionCreate', async interaction => {
             targetData.collection[foundAnimal.name]++;
             saveData(data);
 
-            return interaction.reply({ content: `🛠️ Admin: Added 1x **${foundAnimal.name}** (${foundAnimal.tier}) to ${target.tag}'s collection!`, ephemeral: true });
+            return interaction.reply({ content: `🛠️ Admin: Added 1x ${foundAnimal.badge} **${foundAnimal.name}** (${foundAnimal.tier}) to ${target.tag}'s collection!`, ephemeral: true });
         }
 
         else if (commandName === 'admin-luck-event') {
