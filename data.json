@@ -1,1 +1,7 @@
-
+{
+  "users": {},
+  "market": [
+    { "id": 1, "name": "Hunting Rifle", "price": 500, "type": "tool", "description": "Needed to hunt rare creatures." },
+    { "id": 2, "name": "Lucky Charm", "price": 250, "type": "item", "description": "Boosts fun game wins." }
+  ]
+}
