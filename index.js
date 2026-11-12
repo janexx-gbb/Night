@@ -35,15 +35,18 @@ function readData() {
         };
         fs.writeFileSync(dataFile, JSON.stringify(initialData, null, 2));
     }
-    return JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+    try {
+        return JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+    } catch (e) {
+        return { users: {}, market: [], globalEvent: { luckBonus: 0, catchRateBonus: 0 } };
+    }
 }
 
 function saveData(data) {
     fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
 }
 
-function getUser(userId) {
-    const data = readData();
+function getUser(data, userId) {
     if (!data.users[userId]) {
         data.users[userId] = { 
             wallet: 500, 
@@ -59,48 +62,48 @@ function getUser(userId) {
 
 // Animal Database with exact rates & tier colors
 const HUNT_ANIMALS = [
-    // Common (45%)
-    { name: 'Worm', tier: 'Common', color: '🔴', rate: 0.45, reward: 50 },
-    { name: 'Dog', tier: 'Common', color: '🔴', rate: 0.45, reward: 60 },
-    { name: 'Bird', tier: 'Common', color: '🔴', rate: 0.45, reward: 60 },
-    { name: 'Cat', tier: 'Common', color: '🔴', rate: 0.45, reward: 60 },
-    { name: 'Butterfly', tier: 'Common', color: '🔴', rate: 0.45, reward: 40 },
-    { name: 'Snail', tier: 'Common', color: '🔴', rate: 0.45, reward: 40 },
-    // Uncommon (20%)
-    { name: 'Bee', tier: 'Uncommon', color: '🟡', rate: 0.20, reward: 120 },
-    { name: 'Mouse', tier: 'Uncommon', color: '🟡', rate: 0.20, reward: 130 },
-    { name: 'Rabbit', tier: 'Uncommon', color: '🟡', rate: 0.20, reward: 150 },
-    { name: 'Frog', tier: 'Uncommon', color: '🟡', rate: 0.20, reward: 140 },
-    { name: 'Fish', tier: 'Uncommon', color: '🟡', rate: 0.20, reward: 150 },
-    // Rare (10%)
-    { name: 'Cow', tier: 'Rare', color: '🔵', rate: 0.10, reward: 400 },
-    { name: 'Pig', tier: 'Rare', color: '🔵', rate: 0.10, reward: 350 },
-    { name: 'Kangaroo', tier: 'Rare', color: '🔵', rate: 0.10, reward: 500 },
-    { name: 'Bear', tier: 'Rare', color: '🔵', rate: 0.10, reward: 600 },
-    { name: 'Panda', tier: 'Rare', color: '🔵', rate: 0.10, reward: 650 },
-    // Epic (6%)
-    { name: 'Whale', tier: 'Epic', color: '🟣', rate: 0.06, reward: 1500 },
-    { name: 'Penguin', tier: 'Epic', color: '🟣', rate: 0.06, reward: 1200 },
-    { name: 'Camel', tier: 'Epic', color: '🟣', rate: 0.06, reward: 1300 },
-    { name: 'Dove', tier: 'Epic', color: '🟣', rate: 0.06, reward: 1100 },
-    // Legendary (3%)
-    { name: 'Elephant', tier: 'Legendary', color: '🟠', rate: 0.03, reward: 4000 },
-    { name: 'Crocodile', tier: 'Legendary', color: '🟠', rate: 0.03, reward: 4500 },
-    { name: 'Crow', tier: 'Legendary', color: '🟠', rate: 0.03, reward: 3500 },
-    { name: 'Tiger', tier: 'Legendary', color: '🟠', rate: 0.03, reward: 5000 },
-    // Mythical (1%)
-    { name: 'Deer', tier: 'Mythical', color: '🔵', rate: 0.01, reward: 12000 },
-    { name: 'Lion', tier: 'Mythical', color: '🔵', rate: 0.01, reward: 15000 },
-    // S+ Tier (0.50%)
-    { name: 'Ghost', tier: 'S+ Tier', color: '🩵', rate: 0.005, reward: 35000 },
-    { name: 'Skeleton', tier: 'S+ Tier', color: '🩵', rate: 0.005, reward: 30000 },
+    // Common (45% total / 7.5% each)
+    { name: 'Worm', tier: 'Common', color: '🔴', baseRate: 0.075, reward: 50 },
+    { name: 'Dog', tier: 'Common', color: '🔴', baseRate: 0.075, reward: 60 },
+    { name: 'Bird', tier: 'Common', color: '🔴', baseRate: 0.075, reward: 60 },
+    { name: 'Cat', tier: 'Common', color: '🔴', baseRate: 0.075, reward: 60 },
+    { name: 'Butterfly', tier: 'Common', color: '🔴', baseRate: 0.075, reward: 40 },
+    { name: 'Snail', tier: 'Common', color: '🔴', baseRate: 0.075, reward: 40 },
+    // Uncommon (20% total / 4% each)
+    { name: 'Bee', tier: 'Uncommon', color: '🟡', baseRate: 0.04, reward: 120 },
+    { name: 'Mouse', tier: 'Uncommon', color: '🟡', baseRate: 0.04, reward: 130 },
+    { name: 'Rabbit', tier: 'Uncommon', color: '🟡', baseRate: 0.04, reward: 150 },
+    { name: 'Frog', tier: 'Uncommon', color: '🟡', baseRate: 0.04, reward: 140 },
+    { name: 'Fish', tier: 'Uncommon', color: '🟡', baseRate: 0.04, reward: 150 },
+    // Rare (10% total / 2% each)
+    { name: 'Cow', tier: 'Rare', color: '🔵', baseRate: 0.02, reward: 400 },
+    { name: 'Pig', tier: 'Rare', color: '🔵', baseRate: 0.02, reward: 350 },
+    { name: 'Kangaroo', tier: 'Rare', color: '🔵', baseRate: 0.02, reward: 500 },
+    { name: 'Bear', tier: 'Rare', color: '🔵', baseRate: 0.02, reward: 600 },
+    { name: 'Panda', tier: 'Rare', color: '🔵', baseRate: 0.02, reward: 650 },
+    // Epic (6% total / 1.5% each)
+    { name: 'Whale', tier: 'Epic', color: '🟣', baseRate: 0.015, reward: 1500 },
+    { name: 'Penguin', tier: 'Epic', color: '🟣', baseRate: 0.015, reward: 1200 },
+    { name: 'Camel', tier: 'Epic', color: '🟣', baseRate: 0.015, reward: 1300 },
+    { name: 'Dove', tier: 'Epic', color: '🟣', baseRate: 0.015, reward: 1100 },
+    // Legendary (3% total / 0.75% each)
+    { name: 'Elephant', tier: 'Legendary', color: '🟠', baseRate: 0.0075, reward: 4000 },
+    { name: 'Crocodile', tier: 'Legendary', color: '🟠', baseRate: 0.0075, reward: 4500 },
+    { name: 'Crow', tier: 'Legendary', color: '🟠', baseRate: 0.0075, reward: 3500 },
+    { name: 'Tiger', tier: 'Legendary', color: '🟠', baseRate: 0.0075, reward: 5000 },
+    // Mythical (1% total / 0.5% each)
+    { name: 'Deer', tier: 'Mythical', color: '🔵', baseRate: 0.005, reward: 12000 },
+    { name: 'Lion', tier: 'Mythical', color: '🔵', baseRate: 0.005, reward: 15000 },
+    // S+ Tier (0.50% total / 0.25% each)
+    { name: 'Ghost', tier: 'S+ Tier', color: '🩵', baseRate: 0.0025, reward: 35000 },
+    { name: 'Skeleton', tier: 'S+ Tier', color: '🩵', baseRate: 0.0025, reward: 30000 },
     // SS+ Tier (0.5%)
-    { name: 'Dragon', tier: 'SS+ Tier', color: '🩷', rate: 0.005, reward: 50000 },
-    // SSS+ Tier (0.1%)
-    { name: 'Unicorn', tier: 'SSS+ Tier', color: '🟣', rate: 0.001, reward: 120000 },
-    { name: 'Dinosaur', tier: 'SSS+ Tier', color: '🟣', rate: 0.001, reward: 150000 },
+    { name: 'Dragon', tier: 'SS+ Tier', color: '🩷', baseRate: 0.005, reward: 50000 },
+    // SSS+ Tier (0.1% total / 0.05% each)
+    { name: 'Unicorn', tier: 'SSS+ Tier', color: '🟣', baseRate: 0.0005, reward: 120000 },
+    { name: 'Dinosaur', tier: 'SSS+ Tier', color: '🟣', baseRate: 0.0005, reward: 150000 },
     // GOD Tier (0.01%)
-    { name: 'Snowman', tier: 'GOD Tier', color: '🌈', rate: 0.0001, reward: 500000 }
+    { name: 'Snowman', tier: 'GOD Tier', color: '🌈', baseRate: 0.0001, reward: 500000 }
 ];
 
 // Define Commands
@@ -154,7 +157,6 @@ client.once('ready', async () => {
     console.log('Slash commands synchronized.');
 });
 
-// Cooldown checker utility (2 seconds for economy commands)
 function checkCooldown(user, commandName, seconds = 2) {
     const now = Date.now();
     if (!user.cooldowns) user.cooldowns = {};
@@ -169,13 +171,16 @@ function checkCooldown(user, commandName, seconds = 2) {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName } = interaction;
+
+    // Reload fresh data state on every command execution to prevent memory desync
     const data = readData();
-    const user = getUser(interaction.user.id);
+    const user = getUser(data, interaction.user.id);
 
     try {
         // --- ECONOMY (2s Cooldown) ---
         if (['balance', 'beg', 'work', 'coinflip', 'slot', 'blackjack'].includes(commandName)) {
             const cd = checkCooldown(user, commandName, 2);
+            saveData(data); // save cooldown update
             if (cd > 0) {
                 return interaction.reply({ content: `⏳ Please wait **${cd}s** before using \`/${commandName}\` again.`, ephemeral: true });
             }
@@ -183,7 +188,7 @@ client.on('interactionCreate', async interaction => {
 
         if (commandName === 'balance') {
             const target = interaction.options.getUser('user') || interaction.user;
-            const tData = getUser(target.id);
+            const tData = getUser(data, target.id);
             const embed = new EmbedBuilder()
                 .setColor('#0099ff')
                 .setTitle(`💰 Balance for ${target.username}`)
@@ -216,10 +221,10 @@ client.on('interactionCreate', async interaction => {
             const outcome = Math.random() < 0.5 ? 'heads' : 'tails';
             if (choice === outcome) {
                 user.wallet += amount;
-                interaction.reply(`🪙 It was **${outcome}**! You won **${amount} coins**!`);
+                await interaction.reply(`🪙 It was **${outcome}**! You won **${amount} coins**!`);
             } else {
                 user.wallet -= amount;
-                interaction.reply(`🪙 It was **${outcome}**! You lost **${amount} coins**.`);
+                await interaction.reply(`🪙 It was **${outcome}**! You lost **${amount} coins**.`);
             }
             saveData(data);
         }
@@ -236,14 +241,14 @@ client.on('interactionCreate', async interaction => {
             if (r1 === r2 && r2 === r3) {
                 const winnings = amount * 5;
                 user.wallet += winnings;
-                interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] Jackpot! You won **${winnings} coins**!`);
+                await interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] Jackpot! You won **${winnings} coins**!`);
             } else if (r1 === r2 || r2 === r3 || r1 === r3) {
                 const winnings = Math.floor(amount * 1.5);
                 user.wallet += winnings;
-                interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] Two matching! You won **${winnings} coins**.`);
+                await interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] Two matching! You won **${winnings} coins**.`);
             } else {
                 user.wallet -= amount;
-                interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] No match. You lost **${amount} coins**.`);
+                await interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] No match. You lost **${amount} coins**.`);
             }
             saveData(data);
         }
@@ -252,17 +257,17 @@ client.on('interactionCreate', async interaction => {
             const amount = interaction.options.getInteger('amount');
             if (amount <= 0 || user.wallet < amount) return interaction.reply({ content: '❌ Invalid bet or insufficient wallet funds.', ephemeral: true });
 
-            const playerSum = Math.floor(Math.random() * 8) + 14; // 14 to 21
-            const dealerSum = Math.floor(Math.random() * 7) + 15; // 15 to 21
+            const playerSum = Math.floor(Math.random() * 8) + 14; 
+            const dealerSum = Math.floor(Math.random() * 7) + 15; 
 
             if (playerSum > 21 || (playerSum < dealerSum && dealerSum <= 21)) {
                 user.wallet -= amount;
-                interaction.reply(`🃏 Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You lost **${amount} coins**.`);
+                await interaction.reply(`🃏 Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You lost **${amount} coins**.`);
             } else if (playerSum === dealerSum) {
-                interaction.reply(`🃏 Blackjack: Push! Both had ${playerSum}. Bet returned.`);
+                await interaction.reply(`🃏 Blackjack: Push! Both had ${playerSum}. Bet returned.`);
             } else {
                 user.wallet += amount;
-                interaction.reply(`🃏 Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You won **${amount} coins**!`);
+                await interaction.reply(`🃏 Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You won **${amount} coins**!`);
             }
             saveData(data);
         }
@@ -291,26 +296,29 @@ client.on('interactionCreate', async interaction => {
         // --- HUNTING & COLLECTION ---
         else if (commandName === 'hunt') {
             const cd = checkCooldown(user, 'hunt', 2);
-            if (cd > 0) return interaction.reply({ content: `⏳ Reloading gear! Wait **${cd}s** to hunt again.`, ephemeral: true });
+            if (cd > 0) {
+                saveData(data);
+                return interaction.reply({ content: `⏳ Reloading gear! Wait **${cd}s** to hunt again.`, ephemeral: true });
+            }
+            saveData(data); // save cooldown
 
             if (!user.inventory.includes('Rifle')) {
                 return interaction.reply({ content: '❌ You need a **Rifle** from `/market` to go hunting!', ephemeral: true });
             }
 
-            // Calculate active charm luck boost
             let charmBoost = 0;
             if (user.inventory.includes('Lucky Charm III')) charmBoost = 0.50;
             else if (user.inventory.includes('Lucky Charm II')) charmBoost = 0.30;
             else if (user.inventory.includes('Lucky Charm')) charmBoost = 0.10;
 
-            const totalLuck = 1 + charmBoost + data.globalEvent.luckBonus;
+            const totalLuckMultiplier = 1 + charmBoost + (data.globalEvent.luckBonus || 0);
             const roll = Math.random();
 
-            // Weighted random selection based on rates
             let cumulative = 0;
             let caught = HUNT_ANIMALS[0];
+            
             for (const animal of HUNT_ANIMALS) {
-                let adjustedRate = animal.rate * totalLuck + (data.globalEvent.catchRateBonus / 100);
+                let adjustedRate = (animal.baseRate * totalLuckMultiplier) + ((data.globalEvent.catchRateBonus || 0) / 100);
                 cumulative += adjustedRate;
                 if (roll <= cumulative) {
                     caught = animal;
@@ -318,7 +326,6 @@ client.on('interactionCreate', async interaction => {
                 }
             }
 
-            // Add reward & save collection count
             user.wallet += caught.reward;
             if (!user.collection[caught.name]) user.collection[caught.name] = 0;
             user.collection[caught.name]++;
@@ -362,12 +369,12 @@ client.on('interactionCreate', async interaction => {
                 if (user.wallet < amount) return interaction.reply({ content: '❌ Insufficient wallet funds.', ephemeral: true });
                 user.wallet -= amount;
                 user.bank += amount;
-                interaction.reply(`🏦 Deposited **${amount.toLocaleString()} coins** into your bank.`);
+                await interaction.reply(`🏦 Deposited **${amount.toLocaleString()} coins** into your bank.`);
             } else {
                 if (user.bank < amount) return interaction.reply({ content: '❌ Insufficient bank funds.', ephemeral: true });
                 user.bank -= amount;
                 user.wallet += amount;
-                interaction.reply(`💵 Withdrew **${amount.toLocaleString()} coins** to your wallet.`);
+                await interaction.reply(`💵 Withdrew **${amount.toLocaleString()} coins** to your wallet.`);
             }
             saveData(data);
         }
@@ -379,7 +386,7 @@ client.on('interactionCreate', async interaction => {
             if (amount <= 0 || user.wallet < amount) return interaction.reply({ content: '❌ Insufficient wallet balance.', ephemeral: true });
 
             user.wallet -= amount;
-            const targetData = getUser(target.id);
+            const targetData = getUser(data, target.id);
             targetData.wallet += amount;
             saveData(data);
 
@@ -395,7 +402,7 @@ client.on('interactionCreate', async interaction => {
             if (itemIndex === -1) return interaction.reply({ content: `❌ You do not have **${itemName}** in your inventory.`, ephemeral: true });
 
             user.inventory.splice(itemIndex, 1);
-            const targetData = getUser(target.id);
+            const targetData = getUser(data, target.id);
             targetData.inventory.push(itemName);
             saveData(data);
 
@@ -406,16 +413,16 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'admin-give') {
             const target = interaction.options.getUser('target');
             const amount = interaction.options.getInteger('amount');
-            const targetData = getUser(target.id);
+            const targetData = getUser(data, target.id);
             targetData.wallet += amount;
             saveData(data);
-            return interaction.reply({ content: `🛠️ Admin: Added ${amount.toLocaleString()} coins to ${target.tag}.`, ephemeral: true });
+            return interaction.reply({ content: `🛠️ Admin: Added ${amount.toLocaleString()} coins to ${target.tag}. Wallet is now ${targetData.wallet.toLocaleString()}`, ephemeral: true });
         }
 
         else if (commandName === 'admin-remove') {
             const target = interaction.options.getUser('target');
             const amount = interaction.options.getInteger('amount');
-            const targetData = getUser(target.id);
+            const targetData = getUser(data, target.id);
             targetData.wallet = Math.max(0, targetData.wallet - amount);
             saveData(data);
             return interaction.reply({ content: `🛠️ Admin: Removed ${amount.toLocaleString()} coins from ${target.tag}.`, ephemeral: true });
@@ -450,7 +457,9 @@ client.on('interactionCreate', async interaction => {
 
     } catch (err) {
         console.error(err);
-        await interaction.reply({ content: 'An error occurred processing this command.', ephemeral: true });
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: 'An error occurred processing this command.', ephemeral: true });
+        }
     }
 });
 
