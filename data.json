@@ -1,7 +1,40 @@
 {
   "users": {},
   "market": [
-    { "id": 1, "name": "Hunting Rifle", "price": 500, "type": "tool", "description": "Needed to hunt rare creatures." },
-    { "id": 2, "name": "Lucky Charm", "price": 250, "type": "item", "description": "Boosts fun game wins." }
-  ]
+    {
+      "id": 1,
+      "name": "Rifle",
+      "price": 100000,
+      "type": "tool",
+      "description": "Basic hunting tool."
+    },
+    {
+      "id": 2,
+      "name": "Lucky Charm",
+      "price": 500000,
+      "type": "charm",
+      "luckBoost": 0.1,
+      "description": "Increased Luck by 10%"
+    },
+    {
+      "id": 3,
+      "name": "Lucky Charm II",
+      "price": 2000000,
+      "type": "charm",
+      "luckBoost": 0.3,
+      "description": "Increased Luck by 30%"
+    },
+    {
+      "id": 4,
+      "name": "Lucky Charm III",
+      "price": 10000000,
+      "type": "charm",
+      "luckBoost": 0.5,
+      "description": "Increased Luck by 50%"
+    }
+  ],
+  "globalEvent": {
+    "luckBonus": 0,
+    "catchRateBonus": 0
+  }
 }
