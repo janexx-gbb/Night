@@ -19,11 +19,21 @@ const client = new Client({
     ]
 });
 
-// Data persistence helper
 const dataFile = path.join(__dirname, 'data.json');
+
 function readData() {
     if (!fs.existsSync(dataFile)) {
-        fs.writeFileSync(dataFile, JSON.stringify({ users: {}, market: [] }, null, 2));
+        const initialData = {
+            users: {},
+            market: [
+                { id: 1, name: 'Rifle', price: 100000, type: 'tool', description: 'Basic hunting tool.' },
+                { id: 2, name: 'Lucky Charm', price: 500000, type: 'charm', luckBoost: 0.10, description: 'Increased Luck by 10%' },
+                { id: 3, name: 'Lucky Charm II', price: 2000000, type: 'charm', luckBoost: 0.30, description: 'Increased Luck by 30%' },
+                { id: 4, name: 'Lucky Charm III', price: 10000000, type: 'charm', luckBoost: 0.50, description: 'Increased Luck by 50%' }
+            ],
+            globalEvent: { luckBonus: 0, catchRateBonus: 0 }
+        };
+        fs.writeFileSync(dataFile, JSON.stringify(initialData, null, 2));
     }
     return JSON.parse(fs.readFileSync(dataFile, 'utf8'));
 }
@@ -35,295 +45,412 @@ function saveData(data) {
 function getUser(userId) {
     const data = readData();
     if (!data.users[userId]) {
-        data.users[userId] = { wallet: 100, bank: 500, inventory: [] };
+        data.users[userId] = { 
+            wallet: 500, 
+            bank: 1000, 
+            inventory: [], 
+            collection: {}, 
+            cooldowns: {} 
+        };
         saveData(data);
     }
     return data.users[userId];
 }
 
-// Define Slash Commands
+// Animal Database with exact rates & tier colors
+const HUNT_ANIMALS = [
+    // Common (45%)
+    { name: 'Worm', tier: 'Common', color: '🔴', rate: 0.45, reward: 50 },
+    { name: 'Dog', tier: 'Common', color: '🔴', rate: 0.45, reward: 60 },
+    { name: 'Bird', tier: 'Common', color: '🔴', rate: 0.45, reward: 60 },
+    { name: 'Cat', tier: 'Common', color: '🔴', rate: 0.45, reward: 60 },
+    { name: 'Butterfly', tier: 'Common', color: '🔴', rate: 0.45, reward: 40 },
+    { name: 'Snail', tier: 'Common', color: '🔴', rate: 0.45, reward: 40 },
+    // Uncommon (20%)
+    { name: 'Bee', tier: 'Uncommon', color: '🟡', rate: 0.20, reward: 120 },
+    { name: 'Mouse', tier: 'Uncommon', color: '🟡', rate: 0.20, reward: 130 },
+    { name: 'Rabbit', tier: 'Uncommon', color: '🟡', rate: 0.20, reward: 150 },
+    { name: 'Frog', tier: 'Uncommon', color: '🟡', rate: 0.20, reward: 140 },
+    { name: 'Fish', tier: 'Uncommon', color: '🟡', rate: 0.20, reward: 150 },
+    // Rare (10%)
+    { name: 'Cow', tier: 'Rare', color: '🔵', rate: 0.10, reward: 400 },
+    { name: 'Pig', tier: 'Rare', color: '🔵', rate: 0.10, reward: 350 },
+    { name: 'Kangaroo', tier: 'Rare', color: '🔵', rate: 0.10, reward: 500 },
+    { name: 'Bear', tier: 'Rare', color: '🔵', rate: 0.10, reward: 600 },
+    { name: 'Panda', tier: 'Rare', color: '🔵', rate: 0.10, reward: 650 },
+    // Epic (6%)
+    { name: 'Whale', tier: 'Epic', color: '🟣', rate: 0.06, reward: 1500 },
+    { name: 'Penguin', tier: 'Epic', color: '🟣', rate: 0.06, reward: 1200 },
+    { name: 'Camel', tier: 'Epic', color: '🟣', rate: 0.06, reward: 1300 },
+    { name: 'Dove', tier: 'Epic', color: '🟣', rate: 0.06, reward: 1100 },
+    // Legendary (3%)
+    { name: 'Elephant', tier: 'Legendary', color: '🟠', rate: 0.03, reward: 4000 },
+    { name: 'Crocodile', tier: 'Legendary', color: '🟠', rate: 0.03, reward: 4500 },
+    { name: 'Crow', tier: 'Legendary', color: '🟠', rate: 0.03, reward: 3500 },
+    { name: 'Tiger', tier: 'Legendary', color: '🟠', rate: 0.03, reward: 5000 },
+    // Mythical (1%)
+    { name: 'Deer', tier: 'Mythical', color: '🔵', rate: 0.01, reward: 12000 },
+    { name: 'Lion', tier: 'Mythical', color: '🔵', rate: 0.01, reward: 15000 },
+    // S+ Tier (0.50%)
+    { name: 'Ghost', tier: 'S+ Tier', color: '🩵', rate: 0.005, reward: 35000 },
+    { name: 'Skeleton', tier: 'S+ Tier', color: '🩵', rate: 0.005, reward: 30000 },
+    // SS+ Tier (0.5%)
+    { name: 'Dragon', tier: 'SS+ Tier', color: '🩷', rate: 0.005, reward: 50000 },
+    // SSS+ Tier (0.1%)
+    { name: 'Unicorn', tier: 'SSS+ Tier', color: '🟣', rate: 0.001, reward: 120000 },
+    { name: 'Dinosaur', tier: 'SSS+ Tier', color: '🟣', rate: 0.001, reward: 150000 },
+    // GOD Tier (0.01%)
+    { name: 'Snowman', tier: 'GOD Tier', color: '🌈', rate: 0.0001, reward: 500000 }
+];
+
+// Define Commands
 const commands = [
-    // Balance
-    new SlashCommandBuilder()
-        .setName('balance')
-        .setDescription('Check your or another user\'s wallet and bank balance.')
-        .addUserOption(option => option.setName('user').setDescription('The user to check').setRequired(false)),
-
-    // Economy (Work / Daily)
-    new SlashCommandBuilder()
-        .setName('daily')
-        .setDescription('Claim your daily reward credits!'),
-    new SlashCommandBuilder()
-        .setName('work')
-        .setDescription('Work hard at your job to earn coins.'),
-
-    // Market / Shop
-    new SlashCommandBuilder()
-        .setName('market')
-        .setDescription('View items available in the community market.'),
-    new SlashCommandBuilder()
-        .setName('buy')
-        .setDescription('Buy an item from the market using its item ID.')
-        .addIntegerOption(option => option.setName('id').setDescription('Item ID from /market').setRequired(true)),
-
-    // Hunting
-    new SlashCommandBuilder()
-        .setName('hunt')
-        .setDescription('Go hunting in the wild for animals and loot!'),
-
-    // Fun
-    new SlashCommandBuilder()
-        .setName('coinflip')
-        .setDescription('Bet your coins on a coinflip game!')
-        .addStringOption(option => 
-            option.setName('choice').setDescription('Heads or Tails').setRequired(true)
-                .addChoices({ name: 'Heads', value: 'heads' }, { name: 'Tails', value: 'tails' }))
-        .addIntegerOption(option => option.setName('amount').setDescription('Amount to bet').setRequired(true)),
-
-    // Guild Info
-    new SlashCommandBuilder()
-        .setName('guild')
-        .setDescription('Display detailed information about this server.'),
-
-    // Bot Details
-    new SlashCommandBuilder()
-        .setName('botdetails')
-        .setDescription('Displays technical details and uptime about this bot.'),
-
+    new SlashCommandBuilder().setName('balance').setDescription('Check wallet and bank balance.')
+        .addUserOption(o => o.setName('user').setDescription('User to check').setRequired(false)),
+    new SlashCommandBuilder().setName('beg').setDescription('Beg for quick starter coins.'),
+    new SlashCommandBuilder().setName('work').setDescription('Work to earn coins.'),
+    new SlashCommandBuilder().setName('coinflip').setDescription('Bet coins on coinflip.')
+        .addStringOption(o => o.setName('choice').setDescription('Heads or Tails').setRequired(true).addChoices({name:'Heads', value:'heads'}, {name:'Tails', value:'tails'}))
+        .addIntegerOption(o => o.setName('amount').setDescription('Amount to bet').setRequired(true)),
+    new SlashCommandBuilder().setName('slot').setDescription('Play the slot machine.')
+        .addIntegerOption(o => o.setName('amount').setDescription('Amount to bet').setRequired(true)),
+    new SlashCommandBuilder().setName('blackjack').setDescription('Play a game of blackjack.')
+        .addIntegerOption(o => o.setName('amount').setDescription('Amount to bet').setRequired(true)),
+    new SlashCommandBuilder().setName('market').setDescription('View the item shop market.'),
+    new SlashCommandBuilder().setName('buy').setDescription('Buy an item from the market.')
+        .addIntegerOption(o => o.setName('id').setDescription('Item ID').setRequired(true)),
+    new SlashCommandBuilder().setName('hunt').setDescription('Go hunting for creatures and build your collection!'),
+    new SlashCommandBuilder().setName('collection').setDescription('View your hunted animal collection.'),
+    new SlashCommandBuilder().setName('bank').setDescription('Deposit or withdraw coins from your bank.')
+        .addStringOption(o => o.setName('action').setDescription('deposit or withdraw').setRequired(true).addChoices({name:'Deposit', value:'deposit'}, {name:'Withdraw', value:'withdraw'}))
+        .addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true)),
+    new SlashCommandBuilder().setName('give').setDescription('Transfer coins to another user.')
+        .addUserOption(o => o.setName('target').setDescription('Recipient').setRequired(true))
+        .addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true)),
+    new SlashCommandBuilder().setName('trade').setDescription('Offer an item/charm to another user.')
+        .addUserOption(o => o.setName('target').setDescription('Trade partner').setRequired(true))
+        .addStringOption(o => o.setName('item').setDescription('Item name from inventory').setRequired(true)),
+    
     // Admin Commands
-    new SlashCommandBuilder()
-        .setName('admin-give')
-        .setDescription('Admin command to give currency to a user.')
-        .addUserOption(option => option.setName('target').setDescription('User to give coins to').setRequired(true))
-        .addIntegerOption(option => option.setName('amount').setDescription('Amount of coins').setRequired(true))
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    new SlashCommandBuilder().setName('admin-give').setDescription('Admin: Give coins').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
+        .addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true)),
+    new SlashCommandBuilder().setName('admin-remove').setDescription('Admin: Remove coins').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
+        .addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true)),
+    new SlashCommandBuilder().setName('admin-reset').setDescription('Admin: Reset user account').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true)),
+    new SlashCommandBuilder().setName('admin-nuke').setDescription('Admin: Nuke entire economy database').setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder().setName('admin-luck-event').setDescription('Admin: Set global luck event bonus').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addNumberOption(o => o.setName('amount').setDescription('Luck multiplier bonus').setRequired(true)),
+    new SlashCommandBuilder().setName('admin-catching-rate-event').setDescription('Admin: Set global catch rate boost').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addNumberOption(o => o.setName('percent').setDescription('Catch rate percentage').setRequired(true))
 ];
 
 client.once('ready', async () => {
-    console.log(`Logged in successfully as ${client.user.tag}!`);
-
-    // Register Slash Commands Globally or to Guilds
+    console.log(`Bot logged in as ${client.user.tag}!`);
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    try {
-        console.log('Started refreshing application (/) commands.');
-        await rest.put(
-            Routes.applicationCommands(client.user.id),
-            { body: commands },
-        );
-        console.log('Successfully reloaded application (/) commands.');
-    } catch (error) {
-        console.error(error);
-    }
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    console.log('Slash commands synchronized.');
 });
+
+// Cooldown checker utility (2 seconds for economy commands)
+function checkCooldown(user, commandName, seconds = 2) {
+    const now = Date.now();
+    if (!user.cooldowns) user.cooldowns = {};
+    const expiration = (user.cooldowns[commandName] || 0) + (seconds * 1000);
+    if (now < expiration) {
+        return Math.ceil((expiration - now) / 1000);
+    }
+    user.cooldowns[commandName] = now;
+    return 0;
+}
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const { commandName } = interaction;
+    const data = readData();
+    const user = getUser(interaction.user.id);
 
     try {
-        // --- BALANCE MODULE ---
+        // --- ECONOMY (2s Cooldown) ---
+        if (['balance', 'beg', 'work', 'coinflip', 'slot', 'blackjack'].includes(commandName)) {
+            const cd = checkCooldown(user, commandName, 2);
+            if (cd > 0) {
+                return interaction.reply({ content: `⏳ Please wait **${cd}s** before using \`/${commandName}\` again.`, ephemeral: true });
+            }
+        }
+
         if (commandName === 'balance') {
             const target = interaction.options.getUser('user') || interaction.user;
-            const userData = getUser(target.id);
-            
+            const tData = getUser(target.id);
             const embed = new EmbedBuilder()
                 .setColor('#0099ff')
-                .setTitle(`💰 ${target.username}'s Balance`)
+                .setTitle(`💰 Balance for ${target.username}`)
                 .addFields(
-                    { name: 'Wallet', value: `🪙 ${userData.wallet} coins`, inline: true },
-                    { name: 'Bank', value: `🏦 ${userData.bank} coins`, inline: true }
-                )
-                .setTimestamp();
-            await interaction.reply({ embeds: [embed] });
+                    { name: 'Wallet', value: `🪙 ${tData.wallet.toLocaleString()}`, inline: true },
+                    { name: 'Bank', value: `🏦 ${tData.bank.toLocaleString()}`, inline: true }
+                );
+            return interaction.reply({ embeds: [embed] });
         }
 
-        // --- EARNING MODULE (Daily / Work) ---
-        else if (commandName === 'daily') {
-            const data = readData();
-            const user = getUser(interaction.user.id);
-            const now = Date.now();
-            
-            if (user.lastDaily && now - user.lastDaily < 86400000) {
-                const timeLeft = Math.ceil((86400000 - (now - user.lastDaily)) / (1000 * 60 * 60));
-                return interaction.reply({ content: `⏳ You already claimed your daily reward! Come back in about **${timeLeft} hours**.`, ephemeral: true });
-            }
-
-            user.wallet += 500;
-            user.lastDaily = now;
-            data.users[interaction.user.id] = user;
+        else if (commandName === 'beg') {
+            const amt = Math.floor(Math.random() * 80) + 10;
+            user.wallet += amt;
             saveData(data);
-
-            await interaction.reply('🎉 You successfully claimed your daily **500 coins**!');
+            return interaction.reply(`🤲 You begged and received **${amt} coins**.`);
         }
+
         else if (commandName === 'work') {
-            const data = readData();
-            const user = getUser(interaction.user.id);
-            const now = Date.now();
-
-            if (user.lastWork && now - user.lastWork < 3600000) {
-                return interaction.reply({ content: '⏱️ You are tired from working! Rest for a bit (cooldown: 1 hour).', ephemeral: true });
-            }
-
-            const earnings = Math.floor(Math.random() * 150) + 50;
-            user.wallet += earnings;
-            user.lastWork = now;
-            data.users[interaction.user.id] = user;
+            const amt = Math.floor(Math.random() * 250) + 50;
+            user.wallet += amt;
             saveData(data);
-
-            await interaction.reply(`🛠️ You worked hard and earned **${earnings} coins**!`);
+            return interaction.reply(`💼 You worked a shift and earned **${amt} coins**.`);
         }
 
-        // --- MARKET MODULE ---
-        else if (commandName === 'market') {
-            const data = readData();
-            const embed = new EmbedBuilder()
-                .setColor('#00ffcc')
-                .setTitle('🛒 Community Market & Shop')
-                .setDescription('Use `/buy [id]` to purchase an item.');
-
-            if (data.market.length === 0) {
-                embed.addFields({ name: 'Empty', value: 'No items currently listed.' });
-            } else {
-                data.market.forEach(item => {
-                    embed.addFields({ name: `[ID: ${item.id}] ${item.name} - 🪙 ${item.price}`, value: item.description });
-                });
-            }
-            await interaction.reply({ embeds: [embed] });
-        }
-        else if (commandName === 'buy') {
-            const itemId = interaction.options.getInteger('id');
-            const data = readData();
-            const item = data.market.find(i => i.id === itemId);
-
-            if (!item) return interaction.reply({ content: '❌ Item ID not found in the market.', ephemeral: true });
-
-            const user = getUser(interaction.user.id);
-            if (user.wallet < item.price) {
-                return interaction.reply({ content: `❌ You do not have enough wallet balance! This item costs 🪙 ${item.price}.`, ephemeral: true });
-            }
-
-            user.wallet -= item.price;
-            user.inventory.push(item.name);
-            data.users[interaction.user.id] = user;
-            saveData(data);
-
-            await interaction.reply(`✅ Success! You bought **${item.name}** for 🪙 ${item.price}.`);
-        }
-
-        // --- HUNTING MODULE ---
-        else if (commandName === 'hunt') {
-            const data = readData();
-            const user = getUser(interaction.user.id);
-            const now = Date.now();
-
-            if (user.lastHunt && now - user.lastHunt < 45000) {
-                return interaction.reply({ content: '🎯 You are reloading your gear. Wait 45 seconds before hunting again.', ephemeral: true });
-            }
-
-            const hasRifle = user.inventory.includes('Hunting Rifle');
-            const catchChance = Math.random();
-
-            user.lastHunt = now;
-            data.users[interaction.user.id] = user;
-            saveData(data);
-
-            if (!hasRifle && catchChance < 0.6) {
-                return interaction.reply('🌲 You went hunting empty-handed and scared away a deer. *(Tip: Buy a Hunting Rifle from `/market`!)*');
-            }
-
-            const preys = [
-                { name: 'Wild Rabbit', reward: 80 },
-                { name: 'Forest Deer', reward: 200 },
-                { name: 'Wild Boar', reward: 350 },
-                { name: 'Legendary Bear', reward: 700 }
-            ];
-            const caught = preys[Math.floor(Math.random() * preys.length)];
-            user.wallet += caught.reward;
-            saveData(data);
-
-            await interaction.reply(`🏹 Direct hit! You hunted a **${caught.name}** and sold its hide/meat for **${caught.reward} coins**!`);
-        }
-
-        // --- FUN MODULE ---
         else if (commandName === 'coinflip') {
             const choice = interaction.options.getString('choice');
             const amount = interaction.options.getInteger('amount');
-            const data = readData();
-            const user = getUser(interaction.user.id);
-
-            if (amount <= 0 || user.wallet < amount) {
-                return interaction.reply({ content: '❌ Invalid bet amount or insufficient funds in your wallet.', ephemeral: true });
-            }
+            if (amount <= 0 || user.wallet < amount) return interaction.reply({ content: '❌ Invalid bet or insufficient wallet funds.', ephemeral: true });
 
             const outcome = Math.random() < 0.5 ? 'heads' : 'tails';
-            const won = choice === outcome;
-
-            if (won) {
+            if (choice === outcome) {
                 user.wallet += amount;
-                await interaction.reply(`🪙 It landed on **${outcome}**! You guessed right and won **${amount} coins**!`);
+                interaction.reply(`🪙 It was **${outcome}**! You won **${amount} coins**!`);
             } else {
                 user.wallet -= amount;
-                await interaction.reply(`🪙 It landed on **${outcome}**! You guessed wrong and lost **${amount} coins**.`);
+                interaction.reply(`🪙 It was **${outcome}**! You lost **${amount} coins**.`);
             }
-            data.users[interaction.user.id] = user;
             saveData(data);
         }
 
-        // --- GUILD INFO MODULE ---
-        else if (commandName === 'guild') {
-            const { guild } = interaction;
-            const owner = await guild.fetchOwner();
+        else if (commandName === 'slot') {
+            const amount = interaction.options.getInteger('amount');
+            if (amount <= 0 || user.wallet < amount) return interaction.reply({ content: '❌ Invalid bet or insufficient wallet funds.', ephemeral: true });
 
-            const embed = new EmbedBuilder()
-                .setColor('#5865F2')
-                .setTitle(`🏰 Server Details: ${guild.name}`)
-                .setThumbnail(guild.iconURL({ dynamic: true }))
-                .addFields(
-                    { name: 'Owner', value: `${owner.user.tag}`, inline: true },
-                    { name: 'Members', value: `${guild.memberCount}`, inline: true },
-                    { name: 'Created On', value: `<t:${Math.floor(guild.createdTimestamp / 1000)}:D>`, inline: true }
-                );
-            await interaction.reply({ embeds: [embed] });
+            const symbols = ['🍒', '🍋', '🔔', '💎', '7️⃣'];
+            const r1 = symbols[Math.floor(Math.random() * symbols.length)];
+            const r2 = symbols[Math.floor(Math.random() * symbols.length)];
+            const r3 = symbols[Math.floor(Math.random() * symbols.length)];
+
+            if (r1 === r2 && r2 === r3) {
+                const winnings = amount * 5;
+                user.wallet += winnings;
+                interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] Jackpot! You won **${winnings} coins**!`);
+            } else if (r1 === r2 || r2 === r3 || r1 === r3) {
+                const winnings = Math.floor(amount * 1.5);
+                user.wallet += winnings;
+                interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] Two matching! You won **${winnings} coins**.`);
+            } else {
+                user.wallet -= amount;
+                interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] No match. You lost **${amount} coins**.`);
+            }
+            saveData(data);
         }
 
-        // --- BOT DETAILS MODULE ---
-        else if (commandName === 'botdetails') {
-            const uptimeSecs = Math.floor(client.uptime / 1000);
-            const hours = Math.floor(uptimeSecs / 3600);
-            const minutes = Math.floor((uptimeSecs % 3600) / 60);
+        else if (commandName === 'blackjack') {
+            const amount = interaction.options.getInteger('amount');
+            if (amount <= 0 || user.wallet < amount) return interaction.reply({ content: '❌ Invalid bet or insufficient wallet funds.', ephemeral: true });
 
-            const embed = new EmbedBuilder()
-                .setColor('#ffffff')
-                .setTitle('🤖 Bot Technical Details')
-                .addFields(
-                    { name: 'Library', value: 'Discord.js v14', inline: true },
-                    { name: 'Hosting Platform', value: 'Railway + GitHub', inline: true },
-                    { name: 'Uptime', value: `${hours}h ${minutes}m`, inline: true }
-                );
-            await interaction.reply({ embeds: [embed] });
+            const playerSum = Math.floor(Math.random() * 8) + 14; // 14 to 21
+            const dealerSum = Math.floor(Math.random() * 7) + 15; // 15 to 21
+
+            if (playerSum > 21 || (playerSum < dealerSum && dealerSum <= 21)) {
+                user.wallet -= amount;
+                interaction.reply(`🃏 Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You lost **${amount} coins**.`);
+            } else if (playerSum === dealerSum) {
+                interaction.reply(`🃏 Blackjack: Push! Both had ${playerSum}. Bet returned.`);
+            } else {
+                user.wallet += amount;
+                interaction.reply(`🃏 Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You won **${amount} coins**!`);
+            }
+            saveData(data);
         }
 
-        // --- ADMIN COMMANDS MODULE ---
+        // --- MARKET ---
+        else if (commandName === 'market') {
+            const embed = new EmbedBuilder().setTitle('🛒 Community Market & Shop').setColor('#00ffcc');
+            data.market.forEach(i => {
+                embed.addFields({ name: `[ID: ${i.id}] ${i.name} - 🪙 ${i.price.toLocaleString()}`, value: i.description });
+            });
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        else if (commandName === 'buy') {
+            const id = interaction.options.getInteger('id');
+            const item = data.market.find(i => i.id === id);
+            if (!item) return interaction.reply({ content: '❌ Item not found.', ephemeral: true });
+            if (user.wallet < item.price) return interaction.reply({ content: '❌ Not enough wallet coins.', ephemeral: true });
+
+            user.wallet -= item.price;
+            user.inventory.push(item.name);
+            saveData(data);
+            return interaction.reply(`✅ Successfully purchased **${item.name}** for 🪙 ${item.price.toLocaleString()}!`);
+        }
+
+        // --- HUNTING & COLLECTION ---
+        else if (commandName === 'hunt') {
+            const cd = checkCooldown(user, 'hunt', 2);
+            if (cd > 0) return interaction.reply({ content: `⏳ Reloading gear! Wait **${cd}s** to hunt again.`, ephemeral: true });
+
+            if (!user.inventory.includes('Rifle')) {
+                return interaction.reply({ content: '❌ You need a **Rifle** from `/market` to go hunting!', ephemeral: true });
+            }
+
+            // Calculate active charm luck boost
+            let charmBoost = 0;
+            if (user.inventory.includes('Lucky Charm III')) charmBoost = 0.50;
+            else if (user.inventory.includes('Lucky Charm II')) charmBoost = 0.30;
+            else if (user.inventory.includes('Lucky Charm')) charmBoost = 0.10;
+
+            const totalLuck = 1 + charmBoost + data.globalEvent.luckBonus;
+            const roll = Math.random();
+
+            // Weighted random selection based on rates
+            let cumulative = 0;
+            let caught = HUNT_ANIMALS[0];
+            for (const animal of HUNT_ANIMALS) {
+                let adjustedRate = animal.rate * totalLuck + (data.globalEvent.catchRateBonus / 100);
+                cumulative += adjustedRate;
+                if (roll <= cumulative) {
+                    caught = animal;
+                    break;
+                }
+            }
+
+            // Add reward & save collection count
+            user.wallet += caught.reward;
+            if (!user.collection[caught.name]) user.collection[caught.name] = 0;
+            user.collection[caught.name]++;
+            saveData(data);
+
+            const embed = new EmbedBuilder()
+                .setTitle('🎯 Hunting Expedition')
+                .setColor('#00ff88')
+                .setDescription(`You went hunting and caught a **${caught.name}**!`)
+                .addFields(
+                    { name: 'Tier', value: `${caught.color} **${caught.tier}**`, inline: true },
+                    { name: 'Reward', value: `🪙 ${caught.reward.toLocaleString()} coins`, inline: true },
+                    { name: 'Total Caught', value: `${user.collection[caught.name]}x`, inline: true }
+                );
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        else if (commandName === 'collection') {
+            const embed = new EmbedBuilder().setTitle(`📜 ${interaction.user.username}'s Animal Collection`).setColor('#9900ff');
+            if (Object.keys(user.collection).length === 0) {
+                embed.setDescription('Your collection is empty! Use `/hunt` to catch animals.');
+            } else {
+                let desc = '';
+                for (const [animal, count] of Object.entries(user.collection)) {
+                    const info = HUNT_ANIMALS.find(a => a.name === animal);
+                    desc += `${info ? info.color : '⚪'} **${animal}**: ${count}x (${info ? info.tier : 'Unknown'})\n`;
+                }
+                embed.setDescription(desc);
+            }
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        // --- PERSONAL COMMANDS ---
+        else if (commandName === 'bank') {
+            const action = interaction.options.getString('action');
+            const amount = interaction.options.getInteger('amount');
+
+            if (amount <= 0) return interaction.reply({ content: '❌ Enter a valid amount.', ephemeral: true });
+
+            if (action === 'deposit') {
+                if (user.wallet < amount) return interaction.reply({ content: '❌ Insufficient wallet funds.', ephemeral: true });
+                user.wallet -= amount;
+                user.bank += amount;
+                interaction.reply(`🏦 Deposited **${amount.toLocaleString()} coins** into your bank.`);
+            } else {
+                if (user.bank < amount) return interaction.reply({ content: '❌ Insufficient bank funds.', ephemeral: true });
+                user.bank -= amount;
+                user.wallet += amount;
+                interaction.reply(`💵 Withdrew **${amount.toLocaleString()} coins** to your wallet.`);
+            }
+            saveData(data);
+        }
+
+        else if (commandName === 'give') {
+            const target = interaction.options.getUser('target');
+            const amount = interaction.options.getInteger('amount');
+            if (target.id === interaction.user.id) return interaction.reply({ content: '❌ You cannot give coins to yourself.', ephemeral: true });
+            if (amount <= 0 || user.wallet < amount) return interaction.reply({ content: '❌ Insufficient wallet balance.', ephemeral: true });
+
+            user.wallet -= amount;
+            const targetData = getUser(target.id);
+            targetData.wallet += amount;
+            saveData(data);
+
+            return interaction.reply(`✅ Successfully transferred **${amount.toLocaleString()} coins** to ${target.username}.`);
+        }
+
+        else if (commandName === 'trade') {
+            const target = interaction.options.getUser('target');
+            const itemName = interaction.options.getString('item');
+            if (target.id === interaction.user.id) return interaction.reply({ content: '❌ Cannot trade with yourself.', ephemeral: true });
+
+            const itemIndex = user.inventory.indexOf(itemName);
+            if (itemIndex === -1) return interaction.reply({ content: `❌ You do not have **${itemName}** in your inventory.`, ephemeral: true });
+
+            user.inventory.splice(itemIndex, 1);
+            const targetData = getUser(target.id);
+            targetData.inventory.push(itemName);
+            saveData(data);
+
+            return interaction.reply(`🤝 Successfully traded **${itemName}** to ${target.username}!`);
+        }
+
+        // --- ADMIN COMMANDS ---
         else if (commandName === 'admin-give') {
             const target = interaction.options.getUser('target');
             const amount = interaction.options.getInteger('amount');
-            const data = readData();
-            const targetUser = getUser(target.id);
-
-            targetUser.wallet += amount;
-            data.users[target.id] = targetUser;
+            const targetData = getUser(target.id);
+            targetData.wallet += amount;
             saveData(data);
-
-            await interaction.reply({ content: `✅ Successfully added **${amount} coins** to ${target.tag}'s wallet.`, ephemeral: true });
+            return interaction.reply({ content: `🛠️ Admin: Added ${amount.toLocaleString()} coins to ${target.tag}.`, ephemeral: true });
         }
 
-    } catch (error) {
-        console.error(error);
-        if (interaction.deferred || interaction.replied) {
-            await interaction.followUp({ content: 'There was an error executing this command.', ephemeral: true });
-        } else {
-            await interaction.reply({ content: 'There was an error executing this command.', ephemeral: true });
+        else if (commandName === 'admin-remove') {
+            const target = interaction.options.getUser('target');
+            const amount = interaction.options.getInteger('amount');
+            const targetData = getUser(target.id);
+            targetData.wallet = Math.max(0, targetData.wallet - amount);
+            saveData(data);
+            return interaction.reply({ content: `🛠️ Admin: Removed ${amount.toLocaleString()} coins from ${target.tag}.`, ephemeral: true });
         }
+
+        else if (commandName === 'admin-reset') {
+            const target = interaction.options.getUser('target');
+            data.users[target.id] = { wallet: 100, bank: 500, inventory: [], collection: {}, cooldowns: {} };
+            saveData(data);
+            return interaction.reply({ content: `🛠️ Admin: Reset account data for ${target.tag}.`, ephemeral: true });
+        }
+
+        else if (commandName === 'admin-nuke') {
+            data.users = {};
+            saveData(data);
+            return interaction.reply({ content: '☢️ Admin: Nuked entire economy database.', ephemeral: true });
+        }
+
+        else if (commandName === 'admin-luck-event') {
+            const amount = interaction.options.getNumber('amount');
+            data.globalEvent.luckBonus = amount;
+            saveData(data);
+            return interaction.reply({ content: `✨ Global Luck Event active! Luck bonus set to +${amount * 100}%.`, ephemeral: false });
+        }
+
+        else if (commandName === 'admin-catching-rate-event') {
+            const percent = interaction.options.getNumber('percent');
+            data.globalEvent.catchRateBonus = percent;
+            saveData(data);
+            return interaction.reply({ content: `🎯 Global Catch Rate Event active! Catch boost set to +${percent}%.`, ephemeral: false });
+        }
+
+    } catch (err) {
+        console.error(err);
+        await interaction.reply({ content: 'An error occurred processing this command.', ephemeral: true });
     }
 });
 
