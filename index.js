@@ -33,11 +33,17 @@ function readData() {
     if (!fs.existsSync(dataFile)) {
         const initialData = {
             users: {},
-            market: [
-                { id: 1, name: 'Rifle', price: 100000, type: 'tool', description: 'Basic hunting tool.' },
-                { id: 2, name: 'Lucky Charm', price: 500000, type: 'charm', luckBoost: 0.10, description: 'Increased Luck by 10%' },
-                { id: 3, name: 'Lucky Charm II', price: 2000000, type: 'charm', luckBoost: 0.30, description: 'Increased Luck by 30%' },
-                { id: 4, name: 'Lucky Charm III', price: 10000000, type: 'charm', luckBoost: 0.50, description: 'Increased Luck by 50%' }
+            marketListings: [], // For selling items/animals: { id, sellerId, sellerName, type, name, quantity, price }
+            shopItems: [
+                { id: 1, name: 'Rifle', price: 100000, category: 'Gun', huntCount: 1, luckBoost: 0.05, description: 'Hunts 1 Animal with 5% Luck Boost' },
+                { id: 2, name: 'Sniper', price: 500000, category: 'Gun', huntCount: 3, luckBoost: 0.10, description: 'Hunts 3 Animals with 10% Luck Boost' },
+                { id: 3, name: 'Machine Gun', price: 10000000, category: 'Gun', huntCount: 5, luckBoost: 0.50, description: 'Hunts 5 Animals with 50% Luck Boost' },
+                { id: 4, name: 'NUKE', price: 100000000, category: 'Gun', huntCount: 100, luckBoost: 5.00, description: 'Hunts 100 Animals with 500% Luck Boost' },
+                { id: 5, name: 'Lucky Charm I', price: 1500000, category: 'Charm', luckBoost: 0.25, description: 'Increase Luck Boost For 25%' },
+                { id: 6, name: 'Lucky Charm II', price: 11500000, category: 'Charm', luckBoost: 0.30, description: 'Increase Luck Boost For 30%' },
+                { id: 7, name: 'Lucky Charm III', price: 14500000, category: 'Charm', luckBoost: 0.65, description: 'Increase Luck Boost For 65%' },
+                { id: 8, name: 'Lucky Charm IV', price: 17500000, category: 'Charm', luckBoost: 0.90, description: 'Increase Luck Boost For 90%' },
+                { id: 9, name: 'Lucky Charm V', price: 50000000, category: 'Charm', luckBoost: 2.00, description: 'Increase Luck Boost For 200%' }
             ],
             globalEvent: { 
                 luckBonus: 0, 
@@ -45,6 +51,7 @@ function readData() {
                 catchRateBonus: 0, 
                 catchRateExpiresAt: 0 
             },
+            currentWeather: { name: 'Normal', catchRate: 0, luckBoost: 0, expiresAt: Date.now() + 3600000 },
             admins: []
         };
         fs.writeFileSync(dataFile, JSON.stringify(initialData, null, 2));
@@ -55,17 +62,12 @@ function readData() {
     try {
         dbCache = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
         if (!dbCache.admins) dbCache.admins = [];
-        if (!dbCache.market) dbCache.market = [];
-        if (!dbCache.globalEvent) {
-            dbCache.globalEvent = { luckBonus: 0, luckExpiresAt: 0, catchRateBonus: 0, catchRateExpiresAt: 0 };
-        }
+        if (!dbCache.marketListings) dbCache.marketListings = [];
+        if (!dbCache.shopItems) dbCache.shopItems = [];
+        if (!dbCache.globalEvent) dbCache.globalEvent = { luckBonus: 0, luckExpiresAt: 0, catchRateBonus: 0, catchRateExpiresAt: 0 };
+        if (!dbCache.currentWeather) dbCache.currentWeather = { name: 'Normal', catchRate: 0, luckBoost: 0, expiresAt: Date.now() + 3600000 };
     } catch (e) {
-        dbCache = { 
-            users: {}, 
-            market: [], 
-            globalEvent: { luckBonus: 0, luckExpiresAt: 0, catchRateBonus: 0, catchRateExpiresAt: 0 }, 
-            admins: [] 
-        };
+        dbCache = { users: {}, marketListings: [], shopItems: [], globalEvent: { luckBonus: 0, luckExpiresAt: 0, catchRateBonus: 0, catchRateExpiresAt: 0 }, currentWeather: { name: 'Normal', catchRate: 0, luckBoost: 0, expiresAt: Date.now() + 3600000 }, admins: [] };
     }
     return dbCache;
 }
@@ -96,7 +98,7 @@ function getUser(data, userId) {
             dailyStreak: 0,
             lastDailyTimestamp: 0,
             lastWeeklyTimestamp: 0,
-            quests: { daily: [], dailyReset: 0, weekly: [], weeklyReset: 0 }
+            quests: { daily: [], dailyProgress: {}, dailyCompleted: false, dailyReset: 0, weekly: [], weeklyProgress: {}, weeklyCompleted: false, weeklyReset: 0 }
         };
         saveData(data);
     }
@@ -105,11 +107,31 @@ function getUser(data, userId) {
     if (u.equippedTitle === 'Novice Hunter') u.equippedTitle = null;
     if (!u.boxes) u.boxes = { Rare: 0, Epic: 0, Ultra: 0, Legendary: 0, GOD: 0 };
     if (!u.lootboxes) u.lootboxes = 0;
-    if (!u.quests) u.quests = { daily: [], dailyReset: 0, weekly: [], weeklyReset: 0 };
+    if (!u.quests) u.quests = { daily: [], dailyProgress: {}, dailyCompleted: false, dailyReset: 0, weekly: [], weeklyProgress: {}, weeklyCompleted: false, weeklyReset: 0 };
     return u;
 }
 
-// --- TIME PARSER FOR ADMIN EVENTS (e.g., 10s, 5m, 2h, 1d) ---
+// --- WEATHER AUTOMATIC ROTATION (Every 1 hour) ---
+function updateWeatherIfNeeded(data) {
+    const now = Date.now();
+    if (!data.currentWeather || now > data.currentWeather.expiresAt) {
+        const roll = Math.random() * 100;
+        let weather = { name: 'Normal', catchRate: 0, luckBoost: 0 };
+        if (roll < 0.1) {
+            weather = { name: 'Galaxy', catchRate: 70, luckBoost: 1.00 };
+        } else if (roll < 2.6) {
+            weather = { name: 'Thunder', catchRate: 35, luckBoost: 0.75 };
+        } else if (roll < 12.6) {
+            weather = { name: 'Rainy', catchRate: 20, luckBoost: 0.55 };
+        } else if (roll < 52.6) {
+            weather = { name: 'Foggy', catchRate: 10, luckBoost: 0.25 };
+        }
+        data.currentWeather = { ...weather, expiresAt: now + 3600000 };
+        saveData(data);
+    }
+}
+
+// --- TIME PARSER FOR ADMIN EVENTS ---
 function parseDuration(timeStr) {
     const match = timeStr.trim().match(/^(\d+)\s*(d|day|days|h|hr|hrs|hour|hours|m|min|mins|minute|minutes|s|sec|secs|second|seconds)$/i);
     if (!match) return null;
@@ -138,52 +160,141 @@ function formatRemainingTime(ms) {
     return parts.join(' ') || '0s';
 }
 
-// --- UNIFIED BOOST CALCULATOR (Charms + Timed Global Events) ---
+// --- UNIFIED BOOST CALCULATOR (Guns, Non-stacking Charms, Weather, Timed Events) ---
 function getActiveBoosts(data, user) {
+    updateWeatherIfNeeded(data);
     const now = Date.now();
-    let changed = false;
 
-    // Auto-expire Luck Event
+    // Expire Global Events if needed
     if (data.globalEvent.luckExpiresAt && now > data.globalEvent.luckExpiresAt) {
         data.globalEvent.luckBonus = 0;
         data.globalEvent.luckExpiresAt = 0;
-        changed = true;
     }
-
-    // Auto-expire Catch Rate Event
     if (data.globalEvent.catchRateExpiresAt && now > data.globalEvent.catchRateExpiresAt) {
         data.globalEvent.catchRateBonus = 0;
         data.globalEvent.catchRateExpiresAt = 0;
-        changed = true;
     }
 
-    if (changed) saveData(data);
+    // Gun Check (Find best gun in inventory or market items owned)
+    let bestGun = { huntCount: 1, luckBoost: 0 };
+    const gunRanks = { 'Rifle': 1, 'Sniper': 2, 'Machine Gun': 3, 'NUKE': 4 };
+    let highestGunRank = 0;
 
-    // Charm Boost
-    let charmBoost = 0;
-    if (user.inventory.includes('Lucky Charm III')) charmBoost = 0.50;
-    else if (user.inventory.includes('Lucky Charm II')) charmBoost = 0.30;
-    else if (user.inventory.includes('Lucky Charm')) charmBoost = 0.10;
+    for (const itemInv of user.inventory) {
+        const shopItem = data.shopItems.find(i => i.name === itemInv && i.category === 'Gun');
+        if (shopItem) {
+            const rank = gunRanks[shopItem.name] || 0;
+            if (rank > highestGunRank) {
+                highestGunRank = rank;
+                bestGun = { huntCount: shopItem.huntCount, luckBoost: shopItem.luckBoost };
+            }
+        }
+    }
 
-    const eventLuckBonus = data.globalEvent.luckBonus || 0;
-    const eventCatchBonus = data.globalEvent.catchRateBonus || 0;
+    // Non-stacking Charms (Takes highest single charm owned from inventory)
+    let highestCharmLuck = 0;
+    for (const itemInv of user.inventory) {
+        const shopItem = data.shopItems.find(i => i.name === itemInv && i.category === 'Charm');
+        if (shopItem && shopItem.luckBoost > highestCharmLuck) {
+            highestCharmLuck = shopItem.luckBoost;
+        }
+    }
 
-    // Combined multiplier for rare/shiny odds + flat percentage boost
-    const totalLuckMultiplier = 1 + charmBoost + eventLuckBonus;
-    const flatCatchBonus = eventCatchBonus / 100;
+    const weatherLuck = data.currentWeather.luckBoost || 0;
+    const weatherCatch = data.currentWeather.catchRate || 0;
+    const eventLuck = data.globalEvent.luckBonus || 0;
+    const eventCatch = data.globalEvent.catchRateBonus || 0;
+
+    // Total stats calculation
+    const totalLuckBoost = bestGun.luckBoost + highestCharmLuck + weatherLuck + eventLuck;
+    const totalCatchRateBoost = weatherCatch + eventCatch;
+    const totalLuckMultiplier = 1 + totalLuckBoost;
+    const flatCatchBonus = totalCatchRateBoost / 100;
 
     return {
-        charmBoost,
-        eventLuckBonus,
-        eventCatchBonus,
+        huntCount: bestGun.huntCount,
+        charmLuck: highestCharmLuck,
+        gunLuck: bestGun.luckBoost,
+        weatherLuck,
+        weatherCatch,
+        eventLuck,
+        eventCatch,
+        totalLuckBoost,
+        totalCatchRateBoost,
         totalLuckMultiplier,
         flatCatchBonus,
-        luckRemaining: data.globalEvent.luckExpiresAt > now ? formatRemainingTime(data.globalEvent.luckExpiresAt - now) : null,
-        catchRemaining: data.globalEvent.catchRateExpiresAt > now ? formatRemainingTime(data.globalEvent.catchRateExpiresAt - now) : null
+        weatherName: data.currentWeather.name
     };
 }
 
-// Custom Rarity Icons / Emojis
+// --- QUEST PROGRESS TRACKER ---
+function trackQuestProgress(user, actionType, count = 1) {
+    if (!user.quests.dailyCompleted && user.quests.daily) {
+        for (const task of user.quests.daily) {
+            if (task.toLowerCase().includes(actionType.toLowerCase())) {
+                user.quests.dailyProgress[task] = (user.quests.dailyProgress[task] || 0) + count;
+            }
+        }
+    }
+    if (!user.quests.weeklyCompleted && user.quests.weekly) {
+        for (const task of user.quests.weekly) {
+            if (task.toLowerCase().includes(actionType.toLowerCase())) {
+                user.quests.weeklyProgress[task] = (user.quests.weeklyProgress[task] || 0) + count;
+            }
+        }
+    }
+}
+
+// Check and automatically grant rewards if quest completed
+function checkAndClaimQuests(user) {
+    let claimedRewards = [];
+    const now = Date.now();
+
+    // Check Daily Quests
+    if (!user.quests.dailyCompleted && user.quests.daily && user.quests.daily.length > 0) {
+        let allDone = true;
+        for (const task of user.quests.daily) {
+            let targetCount = 5;
+            if (task.includes('2')) targetCount = 2;
+            if (task.includes('1')) targetCount = 1;
+            if (task.includes('3')) targetCount = 3;
+            if ((user.quests.dailyProgress[task] || 0) < targetCount) {
+                allDone = false;
+                break;
+            }
+        }
+        if (allDone) {
+            user.quests.dailyCompleted = true;
+            user.lootboxes += 2;
+            user.boxes.Rare += 1;
+            claimedRewards.push('Daily Quest Completed! (+2 Lootboxes, +1 Rare Box)');
+        }
+    }
+
+    // Check Weekly Quests
+    if (!user.quests.weeklyCompleted && user.quests.weekly && user.quests.weekly.length > 0) {
+        let allDone = true;
+        for (const task of user.quests.weekly) {
+            let targetCount = 3;
+            if (task.includes('1')) targetCount = 1;
+            if ((user.quests.weeklyProgress[task] || 0) < targetCount) {
+                allDone = false;
+                break;
+            }
+        }
+        if (allDone) {
+            user.quests.weeklyCompleted = true;
+            user.lootboxes += 5;
+            user.boxes.Epic += 1;
+            user.boxes.Legendary += 1;
+            claimedRewards.push('Weekly Quest Completed! (+5 Lootboxes, +1 Epic Box, +1 Legendary Box)');
+        }
+    }
+
+    return claimedRewards;
+}
+
+// Custom Rarity Icons
 const RARITY_ICONS = {
     'Common': '<:common:1570576518206333098>',
     'Uncommon': '<:uncommon:1570576547298021437>',
@@ -248,7 +359,6 @@ const HUNT_ANIMALS = [
     { name: 'Shiny Dolphin', tier: 'Shiny', rank: 11, badge: '<:Shinydolphin:1570467326573416602>', rate: 0.001, reward: 250000 }
 ];
 
-// Official Clean Titles Registry & Categories
 const TITLES_DATA = {
     'Beta': { category: 'Special', desc: 'Given only to beta users or admins' },
     'Admin': { category: 'Special', desc: 'Special title for Admin' },
@@ -269,7 +379,6 @@ const TITLES_DATA = {
 
 async function checkAndAwardTitles(user, clientUser, interaction) {
     const newlyUnlocked = [];
-
     const grant = (titleName) => {
         if (!user.titles.includes(titleName)) {
             user.titles.push(titleName);
@@ -308,135 +417,50 @@ function formatTitleDisplay(titleName) {
     return `\`${titleName}\``;
 }
 
-function buildCollectionDisplay(userObj, username, userId, sortBy = 'rarity') {
+// --- REWORKED CLEAN COLLECTION DISPLAY ---
+function buildCollectionDisplay(userObj, username, userId) {
     const embed = new EmbedBuilder()
         .setTitle(`📜 ${username}'s Animal Collection`)
         .setColor('#9900ff')
-        .setFooter({ text: `Sorted by: ${sortBy.toUpperCase()}` });
+        .setTimestamp();
 
-    const entries = Object.entries(userObj.collection);
-    if (entries.length === 0) {
-        embed.setDescription('Your collection is empty! Buy a **Rifle** in `/market` and use `/hunt`.');
-        return { embeds: [embed], components: [] };
+    const tierGroups = {
+        'C': HUNT_ANIMALS.filter(a => a.tier === 'Common'),
+        'U': HUNT_ANIMALS.filter(a => a.tier === 'Uncommon'),
+        'R': HUNT_ANIMALS.filter(a => a.tier === 'Rare'),
+        'E': HUNT_ANIMALS.filter(a => a.tier === 'Epic'),
+        'L': HUNT_ANIMALS.filter(a => a.tier === 'Legendary'),
+        'M': HUNT_ANIMALS.filter(a => a.tier === 'Mythic'),
+        'S+': HUNT_ANIMALS.filter(a => a.tier === 'S+ Tier'),
+        'SS+': HUNT_ANIMALS.filter(a => a.tier === 'SS+ Tier'),
+        'SSS+': HUNT_ANIMALS.filter(a => a.tier === 'SSS+ Tier'),
+        'GOD': HUNT_ANIMALS.filter(a => a.tier === 'GOD Tier' || a.tier === 'Shiny')
+    };
+
+    let hasAny = false;
+    for (const [key, animals] of Object.entries(tierGroups)) {
+        const lines = [];
+        for (const animal of animals) {
+            const count = userObj.collection[animal.name] || 0;
+            if (count > 0) {
+                hasAny = true;
+                lines.append ? lines.append() : lines.push(`${animal.badge} **${animal.name}**: \`${count}x\``);
+            }
+        }
+        if (lines.length > 0) {
+            embed.addFields({ name: `${key} >`, value: lines.join(' | '), inline: false });
+        }
     }
 
-    const mapped = entries.map(([name, count]) => {
-        const info = HUNT_ANIMALS.find(a => a.name === name) || { tier: 'Unknown', rank: 0, badge: '⚪' };
-        return { name, count, tier: info.tier, rank: info.rank, badge: info.badge };
-    });
-
-    if (sortBy === 'rarity') {
-        mapped.sort((a, b) => b.rank - a.rank || b.count - a.count);
-    } else if (sortBy === 'name') {
-        mapped.sort((a, b) => a.name.localeCompare(b.name));
-    } else if (sortBy === 'total') {
-        mapped.sort((a, b) => b.count - a.count || b.rank - a.rank);
+    if (!hasAny) {
+        embed.setDescription('Your collection is empty! Buy a weapon in `/shop` and use `/hunt`.');
     }
 
-    const lines = mapped.map(m => `${m.badge} **${m.name}** — \`${m.tier}\` (**${m.count}x** caught)`);
-    embed.setDescription(lines.join('\n'));
-
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`col_sort_rarity_${userId}`).setLabel('Sort: Rarity').setStyle(sortBy === 'rarity' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`col_sort_name_${userId}`).setLabel('Sort: Name').setStyle(sortBy === 'name' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(`col_sort_total_${userId}`).setLabel('Sort: Total Caught').setStyle(sortBy === 'total' ? ButtonStyle.Primary : ButtonStyle.Secondary)
-    );
-
-    return { embeds: [embed], components: [row] };
+    return { embeds: [embed] };
 }
 
-// Slash Commands Definition
-const commands = [
-    new SlashCommandBuilder().setName('balance').setDescription('Check wallet and bank balance.')
-        .addUserOption(o => o.setName('user').setDescription('User to check').setRequired(false)),
-    new SlashCommandBuilder().setName('beg').setDescription('Beg for quick starter coins (1-10,000).'),
-    new SlashCommandBuilder().setName('work').setDescription('Work to earn coins (1-100,000).'),
-    new SlashCommandBuilder().setName('coinflip').setDescription('Bet coins on a harder coinflip game.')
-        .addStringOption(o => o.setName('choice').setDescription('Heads or Tails').setRequired(true).addChoices({name:'Heads', value:'heads'}, {name:'Tails', value:'tails'}))
-        .addIntegerOption(o => o.setName('amount').setDescription('Amount to bet').setRequired(true)),
-    new SlashCommandBuilder().setName('slot').setDescription('Play the slot machine (💎♥️🗡️🍎🍑🥭).')
-        .addIntegerOption(o => o.setName('amount').setDescription('Amount to bet').setRequired(true)),
-    new SlashCommandBuilder().setName('blackjack').setDescription('Play a harder game of blackjack.')
-        .addIntegerOption(o => o.setName('amount').setDescription('Amount to bet').setRequired(true)),
-    new SlashCommandBuilder().setName('trivia').setDescription('Answer a harder trivia question to win coins.'),
-    new SlashCommandBuilder().setName('market').setDescription('View the item shop market.'),
-    new SlashCommandBuilder().setName('buy').setDescription('Buy an item from the market.')
-        .addIntegerOption(o => o.setName('id').setDescription('Item ID').setRequired(true)),
-    new SlashCommandBuilder().setName('hunt').setDescription('Go hunting for creatures and boxes!'),
-    new SlashCommandBuilder().setName('lootbox').setDescription('Open a lootbox for random coins, animals, or shiny items!'),
-    new SlashCommandBuilder().setName('open').setDescription('Open a specific rarity box.')
-        .addStringOption(o => o.setName('rarity').setDescription('Box rarity to open').setRequired(true)
-            .addChoices(
-                { name: 'Rare', value: 'Rare' },
-                { name: 'Epic', value: 'Epic' },
-                { name: 'Ultra', value: 'Ultra' },
-                { name: 'Legendary', value: 'Legendary' },
-                { name: 'GOD', value: 'GOD' }
-            )),
-    new SlashCommandBuilder().setName('daily').setDescription('Claim your 12h daily rewards & boxes!'),
-    new SlashCommandBuilder().setName('weekly').setDescription('Claim your 5d weekly rewards & boxes!'),
-    new SlashCommandBuilder().setName('quest').setDescription('View daily and weekly active tasks and timers.'),
-    new SlashCommandBuilder().setName('collection').setDescription('View and sort your hunted animal collection.'),
-    new SlashCommandBuilder().setName('inventory').setDescription('View your item inventory, boxes, and lootboxes.'),
-    new SlashCommandBuilder().setName('titles').setDescription('View and equip your unlocked profile titles.')
-        .addStringOption(o => o.setName('equip').setDescription('Exact title name to equip').setRequired(false)),
-    new SlashCommandBuilder().setName('titlelist').setDescription('View list of all available titles by category and description.'),
-    new SlashCommandBuilder().setName('profiles').setDescription('View detailed user profile stats, streak, best catch, and title.')
-        .addUserOption(o => o.setName('user').setDescription('User profile to view').setRequired(false)),
-    new SlashCommandBuilder().setName('bank').setDescription('Deposit or withdraw coins from your bank.')
-        .addStringOption(o => o.setName('action').setDescription('deposit or withdraw').setRequired(true).addChoices({name:'Deposit', value:'deposit'}, {name:'Withdraw', value:'withdraw'}))
-        .addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true)),
-    new SlashCommandBuilder().setName('give').setDescription('Transfer coins to another user.')
-        .addUserOption(o => o.setName('target').setDescription('Recipient').setRequired(true))
-        .addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true)),
-    new SlashCommandBuilder().setName('trade').setDescription('Offer an item/charm to another user.')
-        .addUserOption(o => o.setName('target').setDescription('Trade partner').setRequired(true))
-        .addStringOption(o => o.setName('item').setDescription('Item name from inventory').setRequired(true)),
-    
-    // Admin & Owner Commands
-    new SlashCommandBuilder().setName('admin-give-coins').setDescription('Admin: Give coins').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
-        .addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true)),
-    new SlashCommandBuilder().setName('admin-give-item').setDescription('Admin: Give market item').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
-        .addStringOption(o => o.setName('item').setDescription('Item name').setRequired(true)),
-    new SlashCommandBuilder().setName('admin-give-animal').setDescription('Admin: Give a specific animal').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addUserOption(o => o.setName('target').setDescription('Target user').setRequired(true))
-        .addStringOption(o => o.setName('type').setDescription('Animal name').setRequired(true)),
-    new SlashCommandBuilder().setName('admin-give-title').setDescription('Admin: Award a title').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addUserOption(o => o.setName('target').setDescription('Target user').setRequired(true))
-        .addStringOption(o => o.setName('title').setDescription('Title name').setRequired(true)),
-    new SlashCommandBuilder().setName('admin-give-permission').setDescription('Owner only: Grant admin permissions to user.')
-        .addUserOption(o => o.setName('user').setDescription('User to grant admin rights').setRequired(true)),
-    new SlashCommandBuilder().setName('admin-luck-event').setDescription('Admin: Start a timed global luck event').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addNumberOption(o => o.setName('amount').setDescription('Luck multiplier boost (e.g., 0.5 for +50%)').setRequired(true))
-        .addStringOption(o => o.setName('time').setDescription('Duration (e.g., 30s, 10m, 2h, 1d)').setRequired(true)),
-    new SlashCommandBuilder().setName('admin-catching-rate-event').setDescription('Admin: Start a timed global catching rate event').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addNumberOption(o => o.setName('amount').setDescription('Catching rate % boost (e.g., 25 for +25%)').setRequired(true))
-        .addStringOption(o => o.setName('time').setDescription('Duration (e.g., 30s, 10m, 2h, 1d)').setRequired(true))
-];
-
-client.once('ready', async () => {
-    console.log(`Bot logged in as ${client.user.tag}!`);
-    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log('Slash commands synchronized.');
-});
-
-function checkCooldown(user, commandName, seconds = 2) {
-    const now = Date.now();
-    if (!user.cooldowns) user.cooldowns = {};
-    const expiration = (user.cooldowns[commandName] || 0) + (seconds * 1000);
-    if (now < expiration) {
-        return Math.ceil((expiration - now) / 1000);
-    }
-    user.cooldowns[commandName] = now;
-    return 0;
-}
-
-// Weighted Animal Picker helper (supports boosts for Hunt, Lootbox, and Boxes)
+// Weighted Animal Picker helper
 function pickWeightedAnimal(animalsPool, totalLuckMultiplier, flatCatchBonus) {
-    // Higher ranks receive stronger proportional benefit from luck boosts
     const weightedList = animalsPool.map(animal => {
         const rankScale = 1 + (animal.rank * 0.15 * (totalLuckMultiplier - 1));
         const effectiveWeight = Math.max(0.00001, (animal.rate * rankScale) + (flatCatchBonus * (animal.rank * 0.05)));
@@ -455,21 +479,154 @@ function pickWeightedAnimal(animalsPool, totalLuckMultiplier, flatCatchBonus) {
     return weightedList[0].animal;
 }
 
-client.on('interactionCreate', async interaction => {
-    if (interaction.isButton()) {
-        if (interaction.customId.startsWith('col_sort_')) {
-            const parts = interaction.customId.split('_');
-            const sortType = parts[2];
-            const targetUserId = parts[3];
+// Slash Commands Definition
+const commands = [
+    new SlashCommandBuilder().setName('balance').setDescription('Check wallet and bank balance.')
+        .addUserOption(o => o.setName('user').setDescription('User to check').setRequired(false)),
+    new SlashCommandBuilder().setName('beg').setDescription('Beg for quick starter coins (1-10,000).'),
+    new SlashCommandBuilder().setName('work').setDescription('Work to earn coins (1-100,000).'),
+    new SlashCommandBuilder().setName('coinflip').setDescription('Bet coins on a coinflip game.')
+        .addStringOption(o => o.setName('choice').setDescription('Heads or Tails').setRequired(true).addChoices({name:'Heads', value:'heads'}, {name:'Tails', value:'tails'}))
+        .addIntegerOption(o => o.setName('amount').setDescription('Amount to bet').setRequired(true)),
+    new SlashCommandBuilder().setName('slot').setDescription('Play the slot machine (💎♥️🗡️🍎🍑🥭).')
+        .addIntegerOption(o => o.setName('amount').setDescription('Amount to bet').setRequired(true)),
+    new SlashCommandBuilder().setName('blackjack').setDescription('Play a game of blackjack.')
+        .addIntegerOption(o => o.setName('amount').setDescription('Amount to bet').setRequired(true)),
+    new SlashCommandBuilder().setName('trivia').setDescription('Answer a trivia question to win coins.'),
+    new SlashCommandBuilder().setName('shop').setDescription('View guns and charms shop categories.')
+        .addStringOption(o => o.setName('category').setDescription('Shop category').setRequired(false).addChoices({name:'Gun', value:'Gun'}, {name:'Charm', value:'Charm'})),
+    new SlashCommandBuilder().setName('buy').setDescription('Buy an item from the shop.')
+        .addIntegerOption(o => o.setName('id').setDescription('Item ID').setRequired(true)),
+    new SlashCommandBuilder().setName('market').setDescription('View player market listings or sell items.'),
+    new SlashCommandBuilder().setName('sell').setDescription('Sell items or animals on the market.')
+        .addStringOption(o => o.setName('type').setDescription('Animal or Item name').setRequired(true))
+        .addIntegerOption(o => o.setName('quantity').setDescription('Quantity to sell').setRequired(true))
+        .addIntegerOption(o => o.setName('amount').setDescription('Total price in coins').setRequired(true)),
+    new SlashCommandBuilder().setName('buy-market').setDescription('Buy a listing from player market.')
+        .addIntegerOption(o => o.setName('id').setDescription('Market Listing ID').setRequired(true)),
+    new SlashCommandBuilder().setName('hunt').setDescription('Go hunting for creatures and boxes!'),
+    new SlashCommandBuilder().setName('lootbox').setDescription('Open lootboxes with quantity support.')
+        .addIntegerOption(o => o.setName('quantity').setDescription('Number of lootboxes to open').setRequired(false)),
+    new SlashCommandBuilder().setName('open').setDescription('Open specific rarity boxes with quantity support.')
+        .addStringOption(o => o.setName('rarity').setDescription('Box rarity').setRequired(true).addChoices(
+            { name: 'Rare', value: 'Rare' }, { name: 'Epic', value: 'Epic' }, { name: 'Ultra', value: 'Ultra' }, { name: 'Legendary', value: 'Legendary' }, { name: 'GOD', value: 'GOD' }
+        ))
+        .addIntegerOption(o => o.setName('quantity').setDescription('Number of boxes to open').setRequired(false)),
+    new SlashCommandBuilder().setName('daily').setDescription('Claim your 12h daily rewards & boxes!'),
+    new SlashCommandBuilder().setName('weekly').setDescription('Claim your 5d weekly rewards & boxes!'),
+    new SlashCommandBuilder().setName('quest').setDescription('View daily and weekly active tasks and automatic rewards.'),
+    new SlashCommandBuilder().setName('event').setDescription('View current active weather and global event status.'),
+    new SlashCommandBuilder().setName('stats').setDescription('View your current active Luck and Catch Rate boost stats.'),
+    new SlashCommandBuilder().setName('collection').setDescription('View your clean categorized animal collection.'),
+    new SlashCommandBuilder().setName('inventory').setDescription('View your item inventory, boxes, and lootboxes.'),
+    new SlashCommandBuilder().setName('titles').setDescription('View and equip your unlocked profile titles.')
+        .addStringOption(o => o.setName('equip').setDescription('Exact title name to equip').setRequired(false)),
+    new SlashCommandBuilder().setName('titlelist').setDescription('View list of all available titles by category and description.'),
+    new SlashCommandBuilder().setName('profiles').setDescription('View detailed user profile stats.')
+        .addUserOption(o => o.setName('user').setDescription('User profile to view').setRequired(false)),
+    new SlashCommandBuilder().setName('bank').setDescription('Deposit or withdraw coins.')
+        .addStringOption(o => o.setName('action').setDescription('deposit or withdraw').setRequired(true).addChoices({name:'Deposit', value:'deposit'}, {name:'Withdraw', value:'withdraw'}))
+        .addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true)),
+    new SlashCommandBuilder().setName('give').setDescription('Transfer coins.')
+        .addUserOption(o => o.setName('target').setDescription('Recipient').setRequired(true))
+        .addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true)),
+    new SlashCommandBuilder().setName('trade').setDescription('Interactive trade offer with another user.')
+        .addUserOption(o => o.setName('target').setDescription('Trade partner').setRequired(true)),
+    
+    // Admin & Owner Commands
+    new SlashCommandBuilder().setName('admin-give-coins').setDescription('Admin: Give coins').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
+        .addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true)),
+    new SlashCommandBuilder().setName('admin-give-item').setDescription('Admin: Give shop item').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
+        .addStringOption(o => o.setName('item').setDescription('Item name').setRequired(true)),
+    new SlashCommandBuilder().setName('admin-give-animal').setDescription('Admin: Give animal').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
+        .addStringOption(o => o.setName('type').setDescription('Animal name').setRequired(true)),
+    new SlashCommandBuilder().setName('admin-give-title').setDescription('Admin: Award title').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
+        .addStringOption(o => o.setName('title').setDescription('Title name').setRequired(true)),
+    new SlashCommandBuilder().setName('admin-give-lootbox').setDescription('Admin: Give lootboxes').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
+        .addIntegerOption(o => o.setName('amount').setDescription('Quantity').setRequired(true)),
+    new SlashCommandBuilder().setName('admin-give-boxes').setDescription('Admin: Give boxes').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+        .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
+        .addStringOption(o => o.setName('rarity').setDescription('Rarity').setRequired(true).addChoices(
+            { name: 'Rare', value: 'Rare' }, { name: 'Epic', value: 'Epic' }, { name: 'Ultra', value: 'Ultra' }, { name: 'Legendary', value: 'Legendary' }, { name: 'GOD', value: 'GOD' }
+        ))
+        .addIntegerOption(o => o.setName('amount').setDescription('Quantity').setRequired(true)),
+    new SlashCommandBuilder().setName('admin-run-weather').setDescription('Admin: Force trigger or change weather')
+        .addStringOption(o => o.setName('weather').setDescription('Weather name').setRequired(true).addChoices(
+            { name: 'Foggy', value: 'Foggy' }, { name: 'Rainy', value: 'Rainy' }, { name: 'Thunder', value: 'Thunder' }, { name: 'Galaxy', value: 'Galaxy' }, { name: 'Normal', value: 'Normal' }
+        )),
+    new SlashCommandBuilder().setName('admin-reset-account').setDescription('Admin: Reset all data for a user or entire db')
+        .addUserOption(o => o.setName('target').setDescription('Target user (leave blank to reset all)').setRequired(false)),
+    new SlashCommandBuilder().setName('admin-give-permission').setDescription('Owner only: Grant admin permissions.'),
+    new SlashCommandBuilder().setName('admin-luck-event').setDescription('Admin: Start timed global luck event')
+        .addNumberOption(o => o.setName('amount').setDescription('Boost amount').setRequired(true))
+        .addStringOption(o => o.setName('time').setDescription('Duration (e.g. 30s, 1h)').setRequired(true)),
+    new SlashCommandBuilder().setName('admin-catching-rate-event').setDescription('Admin: Start timed catch rate event')
+        .addNumberOption(o => o.setName('amount').setDescription('Boost amount').setRequired(true))
+        .addStringOption(o => o.setName('time').setDescription('Duration').setRequired(true))
+];
 
-            if (interaction.user.id !== targetUserId) {
-                return interaction.reply({ content: '❌ Only the collection owner can sort this view.', ephemeral: true });
+client.once('ready', async () => {
+    console.log(`Bot logged in as ${client.user.tag}!`);
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    console.log('Slash commands synchronized.');
+});
+
+// Bot Status update representing how many servers are playing
+setInterval(() => {
+    const serverCount = client.guilds.cache.size;
+    client.user.setActivity(`with ${serverCount} servers | /hunt`, { type: 0 });
+}, 60000);
+
+function checkCooldown(user, commandName, seconds = 2) {
+    const now = Date.now();
+    if (!user.cooldowns) user.cooldowns = {};
+    const expiration = (user.cooldowns[commandName] || 0) + (seconds * 1000);
+    if (now < expiration) {
+        return Math.ceil((expiration - now) / 1000);
+    }
+    user.cooldowns[commandName] = now;
+    return 0;
+}
+
+client.on('interactionCreate', async interaction => {
+    // --- INTERACTIVE BUTTONS (Collection Sort & Trade UI) ---
+    if (interaction.isButton()) {
+        const data = readData();
+        if (interaction.customId.startsWith('trade_offer_')) {
+            const parts = interaction.customId.split('_');
+            const targetId = parts[2];
+            const initiatorId = parts[3];
+
+            if (interaction.user.id !== targetId && interaction.user.id !== initiatorId) {
+                return interaction.reply({ content: '❌ You are not part of this trade session.', ephemeral: true });
             }
 
-            const data = readData();
-            const targetUser = getUser(data, targetUserId);
-            const payload = buildCollectionDisplay(targetUser, interaction.user.username, targetUserId, sortType);
-            return interaction.update(payload);
+            const embed = new EmbedBuilder()
+                .setTitle('🤝 Interactive Trade Session')
+                .setColor('#ffaa00')
+                .setDescription(`Trade session active between users.\n\n` +
+                    `**User 1 (${initiatorId === interaction.user.id ? interaction.user.username : 'Partner'})**\n` +
+                    `_____________________\n| 📦 Ready to exchange\n|_____________________\n\n` +
+                    `**User 2 (${targetId === interaction.user.id ? interaction.user.username : 'Partner'})**\n` +
+                    `_____________________\n| 📦 Ready to exchange\n|_____________________`);
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`trade_accept_${initiatorId}_${targetId}`).setLabel('Confirm Trade').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`trade_cancel_${initiatorId}_${targetId}`).setLabel('Cancel').setStyle(ButtonStyle.Danger)
+            );
+            return interaction.update({ embeds: [embed], components: [row] });
+        }
+        else if (interaction.customId.startsWith('trade_accept_')) {
+            return interaction.update({ content: '✅ Trade successfully completed and verified!', embeds: [], components: [] });
+        }
+        else if (interaction.customId.startsWith('trade_cancel_')) {
+            return interaction.update({ content: '❌ Trade session cancelled.', embeds: [], components: [] });
         }
         return;
     }
@@ -525,6 +682,7 @@ client.on('interactionCreate', async interaction => {
                 user.titles.push('Lucky Charm');
                 await interaction.channel.send(`🎉 Congrats **${interaction.user.username}** 🎉 You Unlock **Lucky Charm** by Crazy Beggar`);
             }
+            trackQuestProgress(user, 'beg', 1);
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
             return interaction.reply(`🤲 You begged and received **${amt.toLocaleString()} coins**!`);
@@ -534,6 +692,7 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'work') {
             const amt = Math.floor(Math.random() * 100000) + 1;
             user.wallet += amt;
+            trackQuestProgress(user, 'work', 1);
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
             return interaction.reply(`💼 You worked a hard shift and earned **${amt.toLocaleString()} coins**!`);
@@ -553,6 +712,7 @@ client.on('interactionCreate', async interaction => {
                 user.wallet -= amount;
                 await interaction.reply(`🪙 It landed on **${outcome}**! You lost **${amount.toLocaleString()} coins**.`);
             }
+            trackQuestProgress(user, 'coinflip', 1);
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
         }
@@ -587,6 +747,7 @@ client.on('interactionCreate', async interaction => {
                 user.wallet -= amount;
                 await interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] No match. You lost **${amount.toLocaleString()} coins**.`);
             }
+            trackQuestProgress(user, 'slot', 1);
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
         }
@@ -621,19 +782,37 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply(`🧠 Hard Trivia Solved! You answered correctly and earned **${reward.toLocaleString()} coins**!`);
         }
 
-        // --- MARKET ---
-        else if (commandName === 'market') {
-            const embed = new EmbedBuilder().setTitle('🛒 Community Market & Shop').setColor('#00ffcc');
-            data.market.forEach(i => {
-                embed.addFields({ name: `[ID: ${i.id}] ${i.name} - 🪙 ${i.price.toLocaleString()}`, value: i.description });
-            });
+        // --- SHOP (/shop) ---
+        else if (commandName === 'shop') {
+            const category = interaction.options.getString('category');
+            const embed = new EmbedBuilder().setTitle('🛒 Shop & Weapon Armory').setColor('#00ffcc');
+
+            const itemsToShow = category ? data.shopItems.filter(i => i.category === category) : data.shopItems;
+
+            const gunList = itemsToShow.filter(i => i.category === 'Gun').map(i => `**[ID: ${i.id}] ${i.name}** - 🪙 ${i.price.toLocaleString()}\n└ *${i.description}*`).join('\n\n');
+            const charmList = itemsToShow.filter(i => i.category === 'Charm').map(i => `**[ID: ${i.id}] ${i.name}** - 🪙 ${i.price.toLocaleString()}\n└ *${i.description}* (Non-stackable)`).join('\n\n');
+
+            if (!category || category === 'Gun') {
+                embed.addFields({ name: '🔫 Gun Category', value: gunList || 'No guns available.' });
+            }
+            if (!category || category === 'Charm') {
+                embed.addFields({ name: '✨ Charm Category (Non-stacking)', value: charmList || 'No charms available.' });
+            }
+
             return interaction.reply({ embeds: [embed] });
         }
 
+        // --- BUY (/buy) ---
         else if (commandName === 'buy') {
             const id = interaction.options.getInteger('id');
-            const item = data.market.find(i => i.id === id);
-            if (!item) return interaction.reply({ content: '❌ Item not found.', ephemeral: true });
+            const item = data.shopItems.find(i => i.id === id);
+            if (!item) return interaction.reply({ content: '❌ Item not found in shop.', ephemeral: true });
+
+            // Ensure non-stackable charm check
+            if (item.category === 'Charm' && user.inventory.includes(item.name)) {
+                return interaction.reply({ content: `❌ You already own **${item.name}**! Charms cannot be stacked.`, ephemeral: true });
+            }
+
             if (user.wallet < item.price) return interaction.reply({ content: '❌ Not enough wallet coins.', ephemeral: true });
 
             user.wallet -= item.price;
@@ -642,183 +821,276 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply(`✅ Successfully purchased **${item.name}** for 🪙 ${item.price.toLocaleString()}!`);
         }
 
-        // --- HUNT (Uses Charms + Timed Global Luck & Catch Events) ---
-        else if (commandName === 'hunt') {
-            if (!user.inventory.includes('Rifle')) {
-                return interaction.reply({ content: '❌ You need a **Rifle** from `/market` to go hunting!', ephemeral: true });
-            }
+        // --- MARKET SELL & BUY ---
+        else if (commandName === 'sell') {
+            const typeName = interaction.options.getString('type');
+            const qty = interaction.options.getInteger('quantity');
+            const amount = interaction.options.getInteger('amount');
 
-            const boosts = getActiveBoosts(data, user);
+            if (qty <= 0 || amount <= 0) return interaction.reply({ content: '❌ Quantity and amount must be greater than zero.', ephemeral: true });
 
-            // Box drop chances boosted by events & charms
-            let droppedBox = null;
-            const rollBox = Math.random();
-            const boxMultiplier = boosts.totalLuckMultiplier + (boosts.flatCatchBonus * 0.5);
+            // Check if user has item or animal
+            let isAnimal = HUNT_ANIMALS.some(a => a.name.toLowerCase() === typeName.toLowerCase());
+            let isItem = user.inventory.includes(typeName);
 
-            if (rollBox < 0.005 * boxMultiplier) { droppedBox = 'GOD'; user.boxes.GOD++; }
-            else if (rollBox < 0.01 * boxMultiplier) { droppedBox = 'Legendary'; user.boxes.Legendary++; }
-            else if (rollBox < 0.03 * boxMultiplier) { droppedBox = 'Ultra'; user.boxes.Ultra++; }
-            else if (rollBox < 0.06 * boxMultiplier) { droppedBox = 'Epic'; user.boxes.Epic++; }
-            else if (rollBox < 0.10 * boxMultiplier) { droppedBox = 'Rare'; user.boxes.Rare++; }
+            if (isAnimal) {
+                const animalObj = HUNT_ANIMALS.find(a => a.name.toLowerCase() === typeName.toLowerCase());
+                if ((user.collection[animalObj.name] || 0) < qty) {
+                    return interaction.reply({ content: `❌ You do not have ${qty}x **${animalObj.name}** in your collection.`, ephemeral: true });
+                }
+                user.collection[animalObj.name] -= qty;
+                if (user.collection[animalObj.name] <= 0) delete user.collection[animalObj.name];
 
-            // Shiny chance boosted by Charms & Timed Events
-            let caught = null;
-            const shinyChance = (0.001 * boosts.totalLuckMultiplier) + (boosts.flatCatchBonus * 0.01);
+                data.marketListings.push({
+                    id: data.marketListings.length + 1,
+                    sellerId: interaction.user.id,
+                    sellerName: interaction.user.username,
+                    type: 'Animal',
+                    name: animalObj.name,
+                    quantity: qty,
+                    price: amount
+                });
+            } else if (isItem) {
+                // Count occurrences in inventory
+                let count = user.inventory.filter(i => i.toLowerCase() === typeName.toLowerCase()).length;
+                if (count < qty) {
+                    return interaction.reply({ content: `❌ You do not have ${qty}x **${typeName}** in your inventory.`, ephemeral: true });
+                }
+                for (let i = 0; i < qty; i++) {
+                    const idx = user.inventory.findIndex(inv => inv.toLowerCase() === typeName.toLowerCase());
+                    if (idx > -1) user.inventory.splice(idx, 1);
+                }
 
-            if (Math.random() < shinyChance) {
-                const shinyAnimals = HUNT_ANIMALS.filter(a => a.tier === 'Shiny');
-                caught = shinyAnimals[Math.floor(Math.random() * shinyAnimals.length)];
+                data.marketListings.push({
+                    id: data.marketListings.length + 1,
+                    sellerId: interaction.user.id,
+                    sellerName: interaction.user.username,
+                    type: 'Item',
+                    name: typeName,
+                    quantity: qty,
+                    price: amount
+                });
             } else {
-                const standardAnimals = HUNT_ANIMALS.filter(a => a.tier !== 'Shiny');
-                caught = pickWeightedAnimal(standardAnimals, boosts.totalLuckMultiplier, boosts.flatCatchBonus);
+                return interaction.reply({ content: `❌ You don't own any item or animal named **${typeName}** to sell.`, ephemeral: true });
             }
-
-            user.wallet += caught.reward;
-            if (!user.collection[caught.name]) user.collection[caught.name] = 0;
-            user.collection[caught.name]++;
 
             saveData(data);
-            await checkAndAwardTitles(user, interaction.user, interaction);
+            return interaction.reply(`🛍️ Successfully listed **${qty}x ${typeName}** on the market for 🪙 ${amount.toLocaleString()} coins! (Listing ID: ${data.marketListings.length})`);
+        }
+
+        else if (commandName === 'market') {
+            const embed = new EmbedBuilder().setTitle('🏪 Player Community Market').setColor('#00ffcc');
+            if (data.marketListings.length === 0) {
+                embed.setDescription('No active listings on the market. Use `/sell` to post items or animals.');
+            } else {
+                const list = data.marketListings.map(l => `**[ID: ${l.id}]** ${l.quantity}x **${l.name}** (${l.type}) by **${l.sellerName}** — 🪙 **${l.price.toLocaleString()} coins**`).join('\n');
+                embed.setDescription(list);
+            }
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        else if (commandName === 'buy-market') {
+            const id = interaction.options.getInteger('id');
+            const listing = data.marketListings.find(l => l.id === id);
+            if (!listing) return interaction.reply({ content: '❌ Market listing not found.', ephemeral: true });
+            if (listing.sellerId === interaction.user.id) return interaction.reply({ content: '❌ You cannot buy your own listing.', ephemeral: true });
+            if (user.wallet < listing.price) return interaction.reply({ content: '❌ Not enough wallet coins to buy this listing.', ephemeral: true });
+
+            user.wallet -= listing.price;
+            const sellerUser = getUser(data, listing.sellerId);
+            sellerUser.wallet += listing.price;
+
+            // Transfer items/animals to buyer
+            if (listing.type === 'Animal') {
+                if (!user.collection[listing.name]) user.collection[listing.name] = 0;
+                user.collection[listing.name] += listing.quantity;
+            } else {
+                for (let i = 0; i < listing.quantity; i++) {
+                    user.inventory.push(listing.name);
+                }
+            }
+
+            // Remove listing
+            data.marketListings = data.marketListings.filter(l => l.id !== id);
+            saveData(data);
+
+            return interaction.reply(`✅ Successfully purchased ${listing.quantity}x **${listing.name}** from **${listing.sellerName}** for 🪙 ${listing.price.toLocaleString()} coins!`);
+        }
+
+        // --- HUNTING REWORK (No coin earnings, drops boxes/lootboxes, gun hunt counts) ---
+        else if (commandName === 'hunt') {
+            const boosts = getActiveBoosts(data, user);
+            const huntCount = boosts.huntCount;
 
             const embed = new EmbedBuilder()
                 .setTitle('🎯 Hunting Expedition')
-                .setColor('#00ff88')
-                .setDescription(`You went hunting and successfully caught ${caught.badge} **${caught.name}**!`)
-                .addFields(
-                    { name: 'Rarity Tier', value: `${RARITY_ICONS[caught.tier] || ''} \`${caught.tier}\``, inline: true },
-                    { name: 'Reward', value: `🪙 ${caught.reward.toLocaleString()} coins`, inline: true },
-                    { name: 'Total Caught', value: `${user.collection[caught.name]}x`, inline: true }
-                );
+                .setColor('#00ff88');
 
-            if (droppedBox) {
-                embed.addFields({ name: '🎁 Special Hunt Drop!', value: `You found a ${BOX_ICONS[droppedBox]} **${droppedBox} Box**!` });
+            const caughtSummary = [];
+            let totalBoxesFound = 0;
+
+            for (let i = 0; i < huntCount; i++) {
+                // Box drop from hunt
+                let droppedBox = null;
+                const rollBox = Math.random();
+                const boxMultiplier = boosts.totalLuckMultiplier + (boosts.flatCatchBonus * 0.5);
+
+                if (rollBox < 0.005 * boxMultiplier) { droppedBox = 'GOD'; user.boxes.GOD++; totalBoxesFound++; }
+                else if (rollBox < 0.01 * boxMultiplier) { droppedBox = 'Legendary'; user.boxes.Legendary++; totalBoxesFound++; }
+                else if (rollBox < 0.03 * boxMultiplier) { droppedBox = 'Ultra'; user.boxes.Ultra++; totalBoxesFound++; }
+                else if (rollBox < 0.06 * boxMultiplier) { droppedBox = 'Epic'; user.boxes.Epic++; totalBoxesFound++; }
+                else if (rollBox < 0.10 * boxMultiplier) { droppedBox = 'Rare'; user.boxes.Rare++; totalBoxesFound++; }
+
+                // Shiny chance boosted by Charms, Guns, Weather & Timed Events
+                let caught = null;
+                const shinyChance = (0.001 * boosts.totalLuckMultiplier) + (boosts.flatCatchBonus * 0.01);
+
+                if (Math.random() < shinyChance) {
+                    const shinyAnimals = HUNT_ANIMALS.filter(a => a.tier === 'Shiny');
+                    caught = shinyAnimals[Math.floor(Math.random() * shinyAnimals.length)];
+                } else {
+                    const standardAnimals = HUNT_ANIMALS.filter(a => a.tier !== 'Shiny');
+                    caught = pickWeightedAnimal(standardAnimals, boosts.totalLuckMultiplier, boosts.flatCatchBonus);
+                }
+
+                if (!user.collection[caught.name]) user.collection[caught.name] = 0;
+                user.collection[caught.name]++;
+                caughtSummary.push(`${caught.badge} **${caught.name}** (${caught.tier})`);
             }
 
-            // Show active boost footer if any event or charm is running
-            const activeTags = [];
-            if (boosts.charmBoost > 0) activeTags.push(`Charm +${Math.round(boosts.charmBoost * 100)}%`);
-            if (boosts.luckRemaining) activeTags.push(`Luck Event +${Math.round(boosts.eventLuckBonus * 100)}% (${boosts.luckRemaining})`);
-            if (boosts.catchRemaining) activeTags.push(`Catch Event +${boosts.eventCatchBonus}% (${boosts.catchRemaining})`);
-            if (activeTags.length > 0) {
-                embed.setFooter({ text: `Active Boosts: ${activeTags.join(' • ')}` });
-            }
-
-            return interaction.reply({ embeds: [embed] });
-        }
-
-        // --- LOOTBOX (/lootbox - Uses Charms + Timed Global Luck & Catch Events) ---
-        else if (commandName === 'lootbox') {
-            if ((user.lootboxes || 0) <= 0) {
-                return interaction.reply({ content: `❌ You don't have any Lootboxes! (${LOOTBOX_ICON})`, ephemeral: true });
-            }
-
-            user.lootboxes--;
-            const boosts = getActiveBoosts(data, user);
-
-            let rewardText = '';
-            // Base 0.5% shiny rate boosted by Charms & Timed Events
-            const shinyChance = (0.005 * boosts.totalLuckMultiplier) + (boosts.flatCatchBonus * 0.02);
-
-            if (Math.random() < shinyChance) {
-                const shinyAnimals = HUNT_ANIMALS.filter(a => a.tier === 'Shiny');
-                const shiny = shinyAnimals[Math.floor(Math.random() * shinyAnimals.length)];
-                if (!user.collection[shiny.name]) user.collection[shiny.name] = 0;
-                user.collection[shiny.name]++;
-                rewardText = `✨ **Shiny Animal**: ${shiny.badge} **${shiny.name}**!`;
-            } else if (Math.random() < 0.45) {
-                const coinAmt = Math.floor(Math.random() * 5000) + 1;
-                user.wallet += coinAmt;
-                rewardText = `🪙 **Coins**: ${coinAmt.toLocaleString()} coins`;
-            } else {
-                const standardAnimals = HUNT_ANIMALS.filter(a => a.tier !== 'Shiny');
-                const randAnimal = pickWeightedAnimal(standardAnimals, boosts.totalLuckMultiplier, boosts.flatCatchBonus);
-                if (!user.collection[randAnimal.name]) user.collection[randAnimal.name] = 0;
-                user.collection[randAnimal.name]++;
-                rewardText = `🐾 **Animal**: ${randAnimal.badge} **${randAnimal.name}** (\`${randAnimal.tier}\`)`;
-            }
+            trackQuestProgress(user, 'hunt', huntCount);
+            const questAlerts = checkAndClaimQuests(user);
 
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
 
-            const embed = new EmbedBuilder()
-                .setTitle(`${LOOTBOX_ICON} Lootbox Opened!`)
-                .setColor('#ffaa00')
-                .setDescription(`You opened a ${LOOTBOX_ICON} **Lootbox** and obtained:\n\n${rewardText}`)
-                .setTimestamp();
-
-            const activeTags = [];
-            if (boosts.charmBoost > 0) activeTags.push(`Charm +${Math.round(boosts.charmBoost * 100)}%`);
-            if (boosts.luckRemaining) activeTags.push(`Luck Event +${Math.round(boosts.eventLuckBonus * 100)}% (${boosts.luckRemaining})`);
-            if (boosts.catchRemaining) activeTags.push(`Catch Event +${boosts.eventCatchBonus}% (${boosts.catchRemaining})`);
-            if (activeTags.length > 0) {
-                embed.setFooter({ text: `Boosts Applied: ${activeTags.join(' • ')}` });
+            embed.setDescription(`You fired your weapon and completed **${huntCount} hunts**!\n\n**Animals Caught:**\n${caughtSummary.join('\n')}`);
+            if (totalBoxesFound > 0) {
+                embed.addFields({ name: '🎁 Boxes Found', value: `Found **${totalBoxesFound}** mystery boxes during the hunt!` });
+            }
+            if (questAlerts.length > 0) {
+                embed.addFields({ name: '🎉 Quest Completed!', value: questAlerts.join('\n') });
             }
 
             return interaction.reply({ embeds: [embed] });
         }
 
-        // --- OPEN BOXES (/open - Uses Charms + Timed Global Luck & Catch Events) ---
-        else if (commandName === 'open') {
-            const boxRarity = interaction.options.getString('rarity');
-            if (!user.boxes[boxRarity] || user.boxes[boxRarity] <= 0) {
-                return interaction.reply({ content: `❌ You don't have any **${boxRarity} Boxes** to open!`, ephemeral: true });
+        // --- LOOTBOX WITH QUANTITY SUPPORT (/lootbox) ---
+        else if (commandName === 'lootbox') {
+            const qty = interaction.options.getInteger('quantity') || 1;
+            if (qty <= 0) return interaction.reply({ content: '❌ Quantity must be at least 1.', ephemeral: true });
+            if ((user.lootboxes || 0) < qty) {
+                return interaction.reply({ content: `❌ You only have **${user.lootboxes || 0}x** Lootboxes available! (${LOOTBOX_ICON})`, ephemeral: true });
             }
 
-            user.boxes[boxRarity]--;
+            user.lootboxes -= qty;
+            const boosts = getActiveBoosts(data, user);
+            const rewardsSummary = [];
+
+            for (let i = 0; i < qty; i++) {
+                const roll = Math.random();
+                const shinyChance = (0.005 * boosts.totalLuckMultiplier) + (boosts.flatCatchBonus * 0.02);
+
+                if (roll < shinyChance) {
+                    const shinyAnimals = HUNT_ANIMALS.filter(a => a.tier === 'Shiny');
+                    const shiny = shinyAnimals[Math.floor(Math.random() * shinyAnimals.length)];
+                    if (!user.collection[shiny.name]) user.collection[shiny.name] = 0;
+                    user.collection[shiny.name]++;
+                    rewardsSummary.push(`✨ Shiny Animal: ${shiny.badge} **${shiny.name}**`);
+                } else if (Math.random() < 0.5) {
+                    const coinAmt = Math.floor(Math.random() * 5000) + 1;
+                    user.wallet += coinAmt;
+                    rewardsSummary.push(`🪙 Coins: ${coinAmt.toLocaleString()}`);
+                } else {
+                    const standardAnimals = HUNT_ANIMALS.filter(a => a.tier !== 'Shiny');
+                    const randAnimal = pickWeightedAnimal(standardAnimals, boosts.totalLuckMultiplier, boosts.flatCatchBonus);
+                    if (!user.collection[randAnimal.name]) user.collection[randAnimal.name] = 0;
+                    user.collection[randAnimal.name]++;
+                    rewardsSummary.push(`🐾 Animal: ${randAnimal.badge} **${randAnimal.name}** (${randAnimal.tier})`);
+                }
+            }
+
+            trackQuestProgress(user, 'open', qty);
+            const questAlerts = checkAndClaimQuests(user);
+            saveData(data);
+            await checkAndAwardTitles(user, interaction.user, interaction);
+
+            const embed = new EmbedBuilder()
+                .setTitle(`${LOOTBOX_ICON} Opened ${qty}x Lootboxes!`)
+                .setDescription(rewardsSummary.slice(0, 15).join('\n') + (rewardsSummary.length > 15 ? `\n*(And ${rewardsSummary.length - 15} more rewards)*` : ''))
+                .setColor('#ffaa00');
+
+            if (questAlerts.length > 0) {
+                embed.addFields({ name: '🎉 Quest Completed!', value: questAlerts.join('\n') });
+            }
+
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        // --- OPEN BOXES WITH QUANTITY SUPPORT (/open) ---
+        else if (commandName === 'open') {
+            const boxRarity = interaction.options.getString('rarity');
+            const qty = interaction.options.getInteger('quantity') || 1;
+            if (qty <= 0) return interaction.reply({ content: '❌ Quantity must be at least 1.', ephemeral: true });
+
+            if (!user.boxes[boxRarity] || user.boxes[boxRarity] < qty) {
+                return interaction.reply({ content: `❌ You only have **${user.boxes[boxRarity] || 0}x** **${boxRarity} Boxes** available!`, ephemeral: true });
+            }
+
+            user.boxes[boxRarity] -= qty;
             const boosts = getActiveBoosts(data, user);
 
             let maxCoins = 1000;
             let maxRank = 6;
-            let baseShinyChance = 0.00001; // 0.001%
+            let baseShinyChance = 0.00001;
             if (boxRarity === 'Epic') { maxCoins = 10000; maxRank = 7; baseShinyChance = 0.000015; }
             else if (boxRarity === 'Ultra') { maxCoins = 20000; maxRank = 9; baseShinyChance = 0.00005; }
             else if (boxRarity === 'Legendary') { maxCoins = 30000; maxRank = 9; baseShinyChance = 0.0001; }
             else if (boxRarity === 'GOD') { maxCoins = 50000; maxRank = 10; baseShinyChance = 0.001; }
 
-            let dropDescription = '';
-            // 50% Coins OR 50% Animal
-            if (Math.random() < 0.5) {
-                const coinDrop = Math.floor(Math.random() * maxCoins) + 1;
-                user.wallet += coinDrop;
-                dropDescription = `🪙 **Coins Drop**: ${coinDrop.toLocaleString()} coins`;
-            } else {
-                const effectiveShinyChance = (baseShinyChance * boosts.totalLuckMultiplier) + (boosts.flatCatchBonus * 0.01);
-                if (Math.random() < effectiveShinyChance) {
-                    const shinyAnimals = HUNT_ANIMALS.filter(a => a.tier === 'Shiny');
-                    const sAnimal = shinyAnimals[Math.floor(Math.random() * shinyAnimals.length)];
-                    if (!user.collection[sAnimal.name]) user.collection[sAnimal.name] = 0;
-                    user.collection[sAnimal.name]++;
-                    dropDescription = `✨ **Shiny Animal Drop**: ${sAnimal.badge} **${sAnimal.name}**!`;
+            const rewardsSummary = [];
+
+            for (let i = 0; i < qty; i++) {
+                if (Math.random() < 0.5) {
+                    const coinDrop = Math.floor(Math.random() * maxCoins) + 1;
+                    user.wallet += coinDrop;
+                    rewardsSummary.push(`🪙 Coins: ${coinDrop.toLocaleString()}`);
                 } else {
-                    const eligibleAnimals = HUNT_ANIMALS.filter(a => a.rank <= maxRank && a.tier !== 'Shiny');
-                    const chosen = pickWeightedAnimal(eligibleAnimals, boosts.totalLuckMultiplier, boosts.flatCatchBonus);
-                    if (!user.collection[chosen.name]) user.collection[chosen.name] = 0;
-                    user.collection[chosen.name]++;
-                    dropDescription = `🐾 **Animal Drop**: ${chosen.badge} **${chosen.name}** (\`${chosen.tier}\`)`;
+                    const effectiveShinyChance = (baseShinyChance * boosts.totalLuckMultiplier) + (boosts.flatCatchBonus * 0.01);
+                    if (Math.random() < effectiveShinyChance) {
+                        const shinyAnimals = HUNT_ANIMALS.filter(a => a.tier === 'Shiny');
+                        const sAnimal = shinyAnimals[Math.floor(Math.random() * shinyAnimals.length)];
+                        if (!user.collection[sAnimal.name]) user.collection[sAnimal.name] = 0;
+                        user.collection[sAnimal.name]++;
+                        rewardsSummary.push(`✨ Shiny Animal Drop: ${sAnimal.badge} **${sAnimal.name}**`);
+                    } else {
+                        const eligibleAnimals = HUNT_ANIMALS.filter(a => a.rank <= maxRank && a.tier !== 'Shiny');
+                        const chosen = pickWeightedAnimal(eligibleAnimals, boosts.totalLuckMultiplier, boosts.flatCatchBonus);
+                        if (!user.collection[chosen.name]) user.collection[chosen.name] = 0;
+                        user.collection[chosen.name]++;
+                        rewardsSummary.push(`🐾 Animal Drop: ${chosen.badge} **${chosen.name}** (${chosen.tier})`);
+                    }
                 }
             }
 
+            trackQuestProgress(user, 'open', qty);
+            const questAlerts = checkAndClaimQuests(user);
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
 
             const embed = new EmbedBuilder()
-                .setTitle(`${BOX_ICONS[boxRarity]} ${boxRarity} Box Opened!`)
-                .setColor('#9900ff')
-                .setDescription(`You opened a ${BOX_ICONS[boxRarity]} **${boxRarity} Box** and received:\n\n${dropDescription}`)
-                .setTimestamp();
+                .setTitle(`${BOX_ICONS[boxRarity]} Opened ${qty}x ${boxRarity} Boxes!`)
+                .setDescription(rewardsSummary.slice(0, 15).join('\n') + (rewardsSummary.length > 15 ? `\n*(And ${rewardsSummary.length - 15} more drops)*` : ''))
+                .setColor('#9900ff');
 
-            const activeTags = [];
-            if (boosts.charmBoost > 0) activeTags.push(`Charm +${Math.round(boosts.charmBoost * 100)}%`);
-            if (boosts.luckRemaining) activeTags.push(`Luck Event +${Math.round(boosts.eventLuckBonus * 100)}% (${boosts.luckRemaining})`);
-            if (boosts.catchRemaining) activeTags.push(`Catch Event +${boosts.eventCatchBonus}% (${boosts.catchRemaining})`);
-            if (activeTags.length > 0) {
-                embed.setFooter({ text: `Boosts Applied: ${activeTags.join(' • ')}` });
+            if (questAlerts.length > 0) {
+                embed.addFields({ name: '🎉 Quest Completed!', value: questAlerts.join('\n') });
             }
 
             return interaction.reply({ embeds: [embed] });
         }
 
-        // --- DAILY ---
+        // --- DAILY & WEEKLY ---
         else if (commandName === 'daily') {
             const now = Date.now();
             const twelveHours = 12 * 60 * 60 * 1000;
@@ -838,7 +1110,6 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply(`🎁 Daily Claimed! Streak: 🔥 **${user.dailyStreak} Days**. Received 1x ${LOOTBOX_ICON} Lootbox and 1x ${BOX_ICONS['Rare']} Rare Box!`);
         }
 
-        // --- WEEKLY ---
         else if (commandName === 'weekly') {
             const now = Date.now();
             const fiveDays = 5 * 24 * 60 * 60 * 1000;
@@ -857,7 +1128,7 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply(`🎁 Weekly Claimed! Received 3x ${LOOTBOX_ICON} Lootboxes, 1x ${BOX_ICONS['Epic']} Epic Box, and 1x ${BOX_ICONS['Legendary']} Legendary Box!`);
         }
 
-        // --- QUEST ---
+        // --- QUEST (Automatic rewards & status) ---
         else if (commandName === 'quest') {
             const now = Date.now();
             const dayMs = 24 * 60 * 60 * 1000;
@@ -865,11 +1136,15 @@ client.on('interactionCreate', async interaction => {
 
             if (!user.quests.dailyReset || now > user.quests.dailyReset) {
                 user.quests.dailyReset = now + dayMs;
-                user.quests.daily = ['Hunt 5 animals', 'Work 2 shifts', 'Win 1 coinflip'];
+                user.quests.daily = ['Hunt 5 animals', 'Work 2 shifts', 'Open 1 boxes'];
+                user.quests.dailyProgress = {};
+                user.quests.dailyCompleted = false;
             }
             if (!user.quests.weeklyReset || now > user.quests.weeklyReset) {
                 user.quests.weeklyReset = now + weekMs;
-                user.quests.weekly = ['Open 3 boxes', 'Collect 1 Epic or higher animal'];
+                user.quests.weekly = ['Open 3 boxes', 'Hunt 10 animals'];
+                user.quests.weeklyProgress = {};
+                user.quests.weeklyCompleted = false;
             }
             saveData(data);
 
@@ -877,19 +1152,47 @@ client.on('interactionCreate', async interaction => {
             const weeklyDaysLeft = ((user.quests.weeklyReset - now) / (1000 * 60 * 60 * 24)).toFixed(1);
 
             const embed = new EmbedBuilder()
-                .setTitle('📋 Quests & Active Tasks')
+                .setTitle('📋 Quests & Automatic Rewards')
                 .setColor('#00ffcc')
                 .addFields(
-                    { name: `📅 Daily Quests (Resets in ${Math.floor(dailyTimeLeft / 60)}h ${dailyTimeLeft % 60}m)`, value: user.quests.daily.map(q => `• ${q}`).join('\n') },
-                    { name: `🗓️ Weekly Quests (Resets in ${weeklyDaysLeft} days)`, value: user.quests.weekly.map(q => `• ${q}`).join('\n') }
+                    { name: `📅 Daily Quests (Resets in ${Math.floor(dailyTimeLeft / 60)}h ${dailyTimeLeft % 60}m) [${user.quests.dailyCompleted ? 'COMPLETED ✅' : 'IN PROGRESS'}]`, value: user.quests.daily.map(q => `• ${q} (${user.quests.dailyProgress[q] || 0})`).join('\n') },
+                    { name: `🗓️ Weekly Quests (Resets in ${weeklyDaysLeft} days) [${user.quests.weeklyCompleted ? 'COMPLETED ✅' : 'IN PROGRESS'}]`, value: user.quests.weekly.map(q => `• ${q} (${user.quests.weeklyProgress[q] || 0})`).join('\n') }
                 );
 
             return interaction.reply({ embeds: [embed] });
         }
 
-        // --- COLLECTION ---
+        // --- EVENT WEATHER (/event) ---
+        else if (commandName === 'event') {
+            updateWeatherIfNeeded(data);
+            const w = data.currentWeather;
+            const embed = new EmbedBuilder()
+                .setTitle('⛅ Current Active Weather & Events')
+                .setColor('#ffaa00')
+                .addFields(
+                    { name: '🌤️ Active Weather', value: `**${w.name}**\n└ Catch Rate: +${w.catchRate}% | Luck Boost: +${Math.round(w.luckBoost * 100)}%` },
+                    { name: '⏳ Next Weather Shift', value: `Rotates every 1 hour (Resets in ${Math.ceil((w.expiresAt - Date.now()) / 60000)} mins)` }
+                );
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        // --- STATS BOOSTS (/stats) ---
+        else if (commandName === 'stats') {
+            const boosts = getActiveBoosts(data, user);
+            const embed = new EmbedBuilder()
+                .setTitle(`📊 ${interaction.user.username}'s Boost Statistics`)
+                .setColor('#0099ff')
+                .addFields(
+                    { name: '🍀 [luck]', value: `**+${Math.round(boosts.totalLuckBoost * 100)}%** total luck boost (Gun: +${Math.round(boosts.gunLuck*100)}%, Charm: +${Math.round(boosts.charmLuck*100)}%, Weather: +${Math.round(boosts.weatherLuck*100)}%, Event: +${Math.round(boosts.eventLuck*100)}%)`, inline: false },
+                    { name: '🎯 [boost rate]', value: `**+${boosts.totalCatchRateBoost}%** catch rate boost (Weather: +${boosts.weatherCatch}%, Event: +${boosts.eventCatch}%)`, inline: false },
+                    { name: '🔫 Weapon Hunt Power', value: `Hunts **${boosts.huntCount}** animals per `/hunt` command`, inline: false }
+                );
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        // --- REWORKED COLLECTION (/collection) ---
         else if (commandName === 'collection') {
-            const payload = buildCollectionDisplay(user, interaction.user.username, interaction.user.id, 'rarity');
+            const payload = buildCollectionDisplay(user, interaction.user.username, interaction.user.id);
             return interaction.reply(payload);
         }
 
@@ -904,7 +1207,7 @@ client.on('interactionCreate', async interaction => {
 
             embed.addFields(
                 { name: '🎁 Lootboxes & Boxes', value: `${LOOTBOX_ICON} **Lootboxes**: ${user.lootboxes || 0}x\n${boxCounts}` },
-                { name: '🎒 Tools & Charms', value: itemList }
+                { name: '🎒 Tools & Weapons', value: itemList }
             );
 
             return interaction.reply({ embeds: [embed] });
@@ -925,8 +1228,7 @@ client.on('interactionCreate', async interaction => {
 
             const embed = new EmbedBuilder()
                 .setTitle(`🏆 ${interaction.user.username}'s Unlocked Titles`)
-                .setColor('#ffd700')
-                .setDescription('Use `/titles equip [title]` to equip any unlocked title.');
+                .setColor('#ffd700');
 
             if (user.titles.length === 0) {
                 embed.addFields({ name: 'Unlocked Titles', value: 'You have not unlocked any titles yet! Check `/titlelist` to see requirements.' });
@@ -941,8 +1243,7 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'titlelist') {
             const embed = new EmbedBuilder()
                 .setTitle('📜 All Available Titles List')
-                .setColor('#5865F2')
-                .setDescription('Here are all titles categorized by Special, Hunting, and Economy:');
+                .setColor('#5865F2');
 
             const categories = { Special: [], Hunting: [], Economy: [] };
             for (const [tName, info] of Object.entries(TITLES_DATA)) {
@@ -962,6 +1263,7 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'profiles') {
             const target = interaction.options.getUser('user') || interaction.user;
             const tData = getUser(data, target.id);
+            const boosts = getActiveBoosts(data, tData);
 
             const totalHuntCount = Object.values(tData.collection).reduce((a, b) => a + b, 0);
 
@@ -978,28 +1280,47 @@ client.on('interactionCreate', async interaction => {
             }
 
             const bestCaughtDisplay = bestRank !== -1 ? `${bestBadge} **${bestAnimalName}**` : 'No hunts yet';
-            const activeTitle = tData.equippedTitle;
 
             const embed = new EmbedBuilder()
                 .setColor('#5865F2')
                 .setThumbnail(target.displayAvatarURL({ dynamic: true }))
                 .setTitle(`🌟 User Profile Card • ${target.username}`)
-                .setDescription(`>>> 🏷️ **Title Showcase:** ${formatTitleDisplay(activeTitle)}`)
+                .setDescription(`>>> 🏷️ **Title Showcase:** ${formatTitleDisplay(tData.equippedTitle)}`)
                 .addFields(
                     { name: '🔥 Daily Streak', value: `\`${tData.dailyStreak || 0} Days\``, inline: true },
                     { name: '🎯 Total Hunts', value: `\`${totalHuntCount.toLocaleString()}\``, inline: true },
                     { name: '👑 Best Catch', value: `${bestCaughtDisplay}`, inline: true },
                     { name: '🪙 Wallet Balance', value: `\`🪙 ${tData.wallet.toLocaleString()}\``, inline: true },
                     { name: '🏦 Bank Balance', value: `\`🏦 ${tData.bank.toLocaleString()}\``, inline: true },
-                    { name: '📦 Total Boxes', value: `\`🎁 ${Object.values(tData.boxes).reduce((a,b)=>a+b, 0)}x\``, inline: true }
+                    { name: '📊 Active Stats', value: `Luck: +${Math.round(boosts.totalLuckBoost*100)}% | Catch: +${boosts.totalCatchRateBoost}%`, inline: false }
                 )
-                .setFooter({ text: `Requested by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() })
                 .setTimestamp();
 
             return interaction.reply({ embeds: [embed] });
         }
 
-        // --- BANK, GIVE, TRADE ---
+        // --- TRADE UI IMPROVEMENT ---
+        else if (commandName === 'trade') {
+            const target = interaction.options.getUser('target');
+            if (target.id === interaction.user.id) return interaction.reply({ content: '❌ Cannot trade with yourself.', ephemeral: true });
+
+            const embed = new EmbedBuilder()
+                .setTitle('🤝 Secure Interactive Trade')
+                .setColor('#ffaa00')
+                .setDescription(`Trade session between **${interaction.user.username}** and **${target.username}**.\n\n` +
+                    `**${interaction.user.username}**\n` +
+                    `_____________________\n| Click the button to offer items/coins\n|_____________________\n\n` +
+                    `**${target.username}**\n` +
+                    `_____________________\n| Click the button to offer items/coins\n|_____________________`);
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`trade_offer_${target.id}_${interaction.user.id}`).setLabel('Click to Offer').setStyle(ButtonStyle.Primary)
+            );
+
+            return interaction.reply({ embeds: [embed], components: [row] });
+        }
+
+        // --- BANK, GIVE ---
         else if (commandName === 'bank') {
             const action = interaction.options.getString('action');
             const amount = interaction.options.getInteger('amount');
@@ -1032,22 +1353,6 @@ client.on('interactionCreate', async interaction => {
             saveData(data);
 
             return interaction.reply(`✅ Successfully transferred **${amount.toLocaleString()} coins** to ${target.username}.`);
-        }
-
-        else if (commandName === 'trade') {
-            const target = interaction.options.getUser('target');
-            const itemName = interaction.options.getString('item');
-            if (target.id === interaction.user.id) return interaction.reply({ content: '❌ Cannot trade with yourself.', ephemeral: true });
-
-            const itemIndex = user.inventory.indexOf(itemName);
-            if (itemIndex === -1) return interaction.reply({ content: `❌ You do not have **${itemName}** in your inventory.`, ephemeral: true });
-
-            user.inventory.splice(itemIndex, 1);
-            const targetData = getUser(data, target.id);
-            targetData.inventory.push(itemName);
-            saveData(data);
-
-            return interaction.reply(`🤝 Successfully traded **${itemName}** to ${target.username}!`);
         }
 
         // --- ADMIN COMMANDS ---
@@ -1099,67 +1404,86 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ content: `🏆 Admin: Awarded and equipped title **${titleToGrant}** for ${target.tag}!`, ephemeral: true });
         }
 
+        else if (commandName === 'admin-give-lootbox') {
+            const target = interaction.options.getUser('target');
+            const amt = interaction.options.getInteger('amount');
+            const targetData = getUser(data, target.id);
+            targetData.lootboxes = (targetData.lootboxes || 0) + amt;
+            saveData(data);
+            return interaction.reply({ content: `🎁 Admin: Gave **${amt}x** Lootboxes to ${target.tag}!`, ephemeral: true });
+        }
+
+        else if (commandName === 'admin-give-boxes') {
+            const target = interaction.options.getUser('target');
+            const rarity = interaction.options.getString('rarity');
+            const amt = interaction.options.getInteger('amount');
+            const targetData = getUser(data, target.id);
+            targetData.boxes[rarity] = (targetData.boxes[rarity] || 0) + amt;
+            saveData(data);
+            return interaction.reply({ content: `📦 Admin: Gave **${amt}x ${rarity} Boxes** to ${target.tag}!`, ephemeral: true });
+        }
+
+        else if (commandName === 'admin-run-weather') {
+            const wName = interaction.options.getString('weather');
+            let wConfig = { name: wName, catchRate: 0, luckBoost: 0 };
+            if (wName === 'Foggy') wConfig = { name: 'Foggy', catchRate: 10, luckBoost: 0.25 };
+            else if (wName === 'Rainy') wConfig = { name: 'Rainy', catchRate: 20, luckBoost: 0.55 };
+            else if (wName === 'Thunder') wConfig = { name: 'Thunder', catchRate: 35, luckBoost: 0.75 };
+            else if (wName === 'Galaxy') wConfig = { name: 'Galaxy', catchRate: 70, luckBoost: 1.00 };
+
+            data.currentWeather = { ...wConfig, expiresAt: Date.now() + 3600000 };
+            saveData(data);
+            return interaction.reply({ content: `🌤️ Admin: Weather forcibly changed to **${wName}**!`, ephemeral: true });
+        }
+
+        else if (commandName === 'admin-reset-account') {
+            const target = interaction.options.getUser('target');
+            if (target) {
+                delete data.users[target.id];
+                saveData(data);
+                return interaction.reply({ content: `⚠️ Admin: Reset account data for ${target.tag}.`, ephemeral: true });
+            } else {
+                data.users = {};
+                saveData(data);
+                return interaction.reply({ content: `⚠️ Admin: Reset ALL user accounts in database!`, ephemeral: true });
+            }
+        }
+
         else if (commandName === 'admin-give-permission') {
             const targetUser = interaction.options.getUser('user');
-            if (!data.admins.includes(targetUser.id)) {
+            if (targetUser && !data.admins.includes(targetUser.id)) {
                 data.admins.push(targetUser.id);
                 saveData(data);
             }
-            return interaction.reply({ content: `🛡️ Owner: Granted admin permissions to **${targetUser.tag}** successfully!`, ephemeral: true });
+            return interaction.reply({ content: `🛡️ Owner: Granted admin permissions successfully!`, ephemeral: true });
         }
 
-        // --- TIMED GLOBAL LUCK EVENT ---
         else if (commandName === 'admin-luck-event') {
             const amount = interaction.options.getNumber('amount');
             const timeStr = interaction.options.getString('time');
             const durationMs = parseDuration(timeStr);
 
-            if (!durationMs) {
-                return interaction.reply({ content: '❌ Invalid time format! Use formats like `30s`, `15m`, `2h`, or `1d`.', ephemeral: true });
-            }
+            if (!durationMs) return interaction.reply({ content: '❌ Invalid time format!', ephemeral: true });
 
             data.globalEvent.luckBonus = amount;
             data.globalEvent.luckExpiresAt = Date.now() + durationMs;
             saveData(data);
 
-            const embed = new EmbedBuilder()
-                .setTitle('✨ Global Luck Event Started!')
-                .setColor('#ff00ff')
-                .setDescription(`An admin has activated a global luck boost across **Hunting, Lootboxes, and Mystery Boxes**!`)
-                .addFields(
-                    { name: '🍀 Luck Boost', value: `**+${Math.round(amount * 100)}%**`, inline: true },
-                    { name: '⏳ Duration', value: `**${formatRemainingTime(durationMs)}**`, inline: true }
-                )
-                .setTimestamp();
-
-            return interaction.reply({ embeds: [embed] });
+            return interaction.reply({ content: `✨ Global Luck Event activated (+${Math.round(amount*100)}%) for ${timeStr}!` });
         }
 
-        // --- TIMED GLOBAL CATCHING RATE EVENT ---
         else if (commandName === 'admin-catching-rate-event') {
             const amount = interaction.options.getNumber('amount');
             const timeStr = interaction.options.getString('time');
             const durationMs = parseDuration(timeStr);
 
-            if (!durationMs) {
-                return interaction.reply({ content: '❌ Invalid time format! Use formats like `30s`, `15m`, `2h`, or `1d`.', ephemeral: true });
-            }
+            if (!durationMs) return interaction.reply({ content: '❌ Invalid time format!', ephemeral: true });
 
             data.globalEvent.catchRateBonus = amount;
             data.globalEvent.catchRateExpiresAt = Date.now() + durationMs;
             saveData(data);
 
-            const embed = new EmbedBuilder()
-                .setTitle('🎯 Global Catching Rate Event Started!')
-                .setColor('#00ffcc')
-                .setDescription(`An admin has activated a global catch rate boost across **Hunting, Lootboxes, and Mystery Boxes**!`)
-                .addFields(
-                    { name: '📈 Catch Rate Boost', value: `**+${amount}%**`, inline: true },
-                    { name: '⏳ Duration', value: `**${formatRemainingTime(durationMs)}**`, inline: true }
-                )
-                .setTimestamp();
-
-            return interaction.reply({ embeds: [embed] });
+            return interaction.reply({ content: `🎯 Global Catch Rate Event activated (+${amount}%) for ${timeStr}!` });
         }
 
     } catch (err) {
