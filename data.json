@@ -1,40 +1,95 @@
 {
   "users": {},
-  "market": [
+  "marketListings": [],
+  "shopItems": [
     {
       "id": 1,
       "name": "Rifle",
       "price": 100000,
-      "type": "tool",
-      "description": "Basic hunting tool."
+      "category": "Gun",
+      "huntCount": 1,
+      "luckBoost": 0.05,
+      "description": "Hunts 1 Animal with 5% Luck Boost"
     },
     {
       "id": 2,
-      "name": "Lucky Charm",
+      "name": "Sniper",
       "price": 500000,
-      "type": "charm",
-      "luckBoost": 0.1,
-      "description": "Increased Luck by 10%"
+      "category": "Gun",
+      "huntCount": 3,
+      "luckBoost": 0.10,
+      "description": "Hunts 3 Animals with 10% Luck Boost"
     },
     {
       "id": 3,
-      "name": "Lucky Charm II",
-      "price": 2000000,
-      "type": "charm",
-      "luckBoost": 0.3,
-      "description": "Increased Luck by 30%"
+      "name": "Machine Gun",
+      "price": 10000000,
+      "category": "Gun",
+      "huntCount": 5,
+      "luckBoost": 0.50,
+      "description": "Hunts 5 Animals with 50% Luck Boost"
     },
     {
       "id": 4,
+      "name": "NUKE",
+      "price": 100000000,
+      "category": "Gun",
+      "huntCount": 100,
+      "luckBoost": 5.00,
+      "description": "Hunts 100 Animals with 500% Luck Boost"
+    },
+    {
+      "id": 5,
+      "name": "Lucky Charm I",
+      "price": 1500000,
+      "category": "Charm",
+      "luckBoost": 0.25,
+      "description": "Increase Luck Boost For 25%"
+    },
+    {
+      "id": 6,
+      "name": "Lucky Charm II",
+      "price": 11500000,
+      "category": "Charm",
+      "luckBoost": 0.30,
+      "description": "Increase Luck Boost For 30%"
+    },
+    {
+      "id": 7,
       "name": "Lucky Charm III",
-      "price": 10000000,
-      "type": "charm",
-      "luckBoost": 0.5,
-      "description": "Increased Luck by 50%"
+      "price": 14500000,
+      "category": "Charm",
+      "luckBoost": 0.65,
+      "description": "Increase Luck Boost For 65%"
+    },
+    {
+      "id": 8,
+      "name": "Lucky Charm IV",
+      "price": 17500000,
+      "category": "Charm",
+      "luckBoost": 0.90,
+      "description": "Increase Luck Boost For 90%"
+    },
+    {
+      "id": 9,
+      "name": "Lucky Charm V",
+      "price": 50000000,
+      "category": "Charm",
+      "luckBoost": 2.00,
+      "description": "Increase Luck Boost For 200%"
     }
   ],
   "globalEvent": {
     "luckBonus": 0,
-    "catchRateBonus": 0
-  }
+    "luckExpiresAt": 0,
+    "catchRateBonus": 0,
+    "catchRateExpiresAt": 0
+  },
+  "currentWeather": {
+    "name": "Normal",
+    "catchRate": 0,
+    "luckBoost": 0,
+    "expiresAt": 1778878800000
+  },
+  "admins": []
 }
