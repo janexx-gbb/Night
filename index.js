@@ -1,4 +1,5 @@
-const { 
+
+              const { 
     Client, 
     GatewayIntentBits, 
     REST, 
@@ -30,10 +31,19 @@ let dbCache = null;
 function readData() {
     if (dbCache) return dbCache;
 
-    if (!fs.existsSync(dataFile)) {
-        const initialData = {
+    try {
+        if (fs.existsSync(dataFile)) {
+            const raw = fs.readFileSync(dataFile, 'utf8');
+            dbCache = JSON.parse(raw);
+        }
+    } catch (e) {
+        console.error('Error reading data.json, initializing fallback cache:', e);
+    }
+
+    if (!dbCache || typeof dbCache !== 'object') {
+        dbCache = {
             users: {},
-            marketListings: [], // For selling items/animals: { id, sellerId, sellerName, type, name, quantity, price }
+            marketListings: [],
             shopItems: [
                 { id: 1, name: 'Rifle', price: 100000, category: 'Gun', huntCount: 1, luckBoost: 0.05, description: 'Hunts 1 Animal with 5% Luck Boost' },
                 { id: 2, name: 'Sniper', price: 500000, category: 'Gun', huntCount: 3, luckBoost: 0.10, description: 'Hunts 3 Animals with 10% Luck Boost' },
@@ -45,30 +55,31 @@ function readData() {
                 { id: 8, name: 'Lucky Charm IV', price: 17500000, category: 'Charm', luckBoost: 0.90, description: 'Increase Luck Boost For 90%' },
                 { id: 9, name: 'Lucky Charm V', price: 50000000, category: 'Charm', luckBoost: 2.00, description: 'Increase Luck Boost For 200%' }
             ],
-            globalEvent: { 
-                luckBonus: 0, 
-                luckExpiresAt: 0, 
-                catchRateBonus: 0, 
-                catchRateExpiresAt: 0 
-            },
+            globalEvent: { luckBonus: 0, luckExpiresAt: 0, catchRateBonus: 0, catchRateExpiresAt: 0 },
             currentWeather: { name: 'Normal', catchRate: 0, luckBoost: 0, expiresAt: Date.now() + 3600000 },
             admins: []
         };
-        fs.writeFileSync(dataFile, JSON.stringify(initialData, null, 2));
-        dbCache = initialData;
-        return dbCache;
     }
 
-    try {
-        dbCache = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
-        if (!dbCache.admins) dbCache.admins = [];
-        if (!dbCache.marketListings) dbCache.marketListings = [];
-        if (!dbCache.shopItems) dbCache.shopItems = [];
-        if (!dbCache.globalEvent) dbCache.globalEvent = { luckBonus: 0, luckExpiresAt: 0, catchRateBonus: 0, catchRateExpiresAt: 0 };
-        if (!dbCache.currentWeather) dbCache.currentWeather = { name: 'Normal', catchRate: 0, luckBoost: 0, expiresAt: Date.now() + 3600000 };
-    } catch (e) {
-        dbCache = { users: {}, marketListings: [], shopItems: [], globalEvent: { luckBonus: 0, luckExpiresAt: 0, catchRateBonus: 0, catchRateExpiresAt: 0 }, currentWeather: { name: 'Normal', catchRate: 0, luckBoost: 0, expiresAt: Date.now() + 3600000 }, admins: [] };
+    if (!dbCache.users) dbCache.users = {};
+    if (!dbCache.marketListings) dbCache.marketListings = [];
+    if (!dbCache.shopItems || dbCache.shopItems.length === 0) {
+        dbCache.shopItems = [
+            { id: 1, name: 'Rifle', price: 100000, category: 'Gun', huntCount: 1, luckBoost: 0.05, description: 'Hunts 1 Animal with 5% Luck Boost' },
+            { id: 2, name: 'Sniper', price: 500000, category: 'Gun', huntCount: 3, luckBoost: 0.10, description: 'Hunts 3 Animals with 10% Luck Boost' },
+            { id: 3, name: 'Machine Gun', price: 10000000, category: 'Gun', huntCount: 5, luckBoost: 0.50, description: 'Hunts 5 Animals with 50% Luck Boost' },
+            { id: 4, name: 'NUKE', price: 100000000, category: 'Gun', huntCount: 100, luckBoost: 5.00, description: 'Hunts 100 Animals with 500% Luck Boost' },
+            { id: 5, name: 'Lucky Charm I', price: 1500000, category: 'Charm', luckBoost: 0.25, description: 'Increase Luck Boost For 25%' },
+            { id: 6, name: 'Lucky Charm II', price: 11500000, category: 'Charm', luckBoost: 0.30, description: 'Increase Luck Boost For 30%' },
+            { id: 7, name: 'Lucky Charm III', price: 14500000, category: 'Charm', luckBoost: 0.65, description: 'Increase Luck Boost For 65%' },
+            { id: 8, name: 'Lucky Charm IV', price: 17500000, category: 'Charm', luckBoost: 0.90, description: 'Increase Luck Boost For 90%' },
+            { id: 9, name: 'Lucky Charm V', price: 50000000, category: 'Charm', luckBoost: 2.00, description: 'Increase Luck Boost For 200%' }
+        ];
     }
+    if (!dbCache.globalEvent) dbCache.globalEvent = { luckBonus: 0, luckExpiresAt: 0, catchRateBonus: 0, catchRateExpiresAt: 0 };
+    if (!dbCache.currentWeather) dbCache.currentWeather = { name: 'Normal', catchRate: 0, luckBoost: 0, expiresAt: Date.now() + 3600000 };
+    if (!dbCache.admins) dbCache.admins = [];
+
     return dbCache;
 }
 
@@ -145,27 +156,11 @@ function parseDuration(timeStr) {
     return null;
 }
 
-function formatRemainingTime(ms) {
-    if (ms <= 0) return 'Expired';
-    const seconds = Math.floor((ms / 1000) % 60);
-    const minutes = Math.floor((ms / (1000 * 60)) % 60);
-    const hours = Math.floor((ms / (1000 * 60 * 60)) % 24);
-    const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-
-    const parts = [];
-    if (days > 0) parts.push(`${days}d`);
-    if (hours > 0) parts.push(`${hours}h`);
-    if (minutes > 0) parts.push(`${minutes}m`);
-    if (seconds > 0) parts.push(`${seconds}s`);
-    return parts.join(' ') || '0s';
-}
-
-// --- UNIFIED BOOST CALCULATOR (Guns, Non-stacking Charms, Weather, Timed Events) ---
+// --- UNIFIED BOOST CALCULATOR ---
 function getActiveBoosts(data, user) {
     updateWeatherIfNeeded(data);
     const now = Date.now();
 
-    // Expire Global Events if needed
     if (data.globalEvent.luckExpiresAt && now > data.globalEvent.luckExpiresAt) {
         data.globalEvent.luckBonus = 0;
         data.globalEvent.luckExpiresAt = 0;
@@ -175,7 +170,6 @@ function getActiveBoosts(data, user) {
         data.globalEvent.catchRateExpiresAt = 0;
     }
 
-    // Gun Check (Find best gun in inventory or market items owned)
     let bestGun = { huntCount: 1, luckBoost: 0 };
     const gunRanks = { 'Rifle': 1, 'Sniper': 2, 'Machine Gun': 3, 'NUKE': 4 };
     let highestGunRank = 0;
@@ -191,7 +185,6 @@ function getActiveBoosts(data, user) {
         }
     }
 
-    // Non-stacking Charms (Takes highest single charm owned from inventory)
     let highestCharmLuck = 0;
     for (const itemInv of user.inventory) {
         const shopItem = data.shopItems.find(i => i.name === itemInv && i.category === 'Charm');
@@ -205,7 +198,6 @@ function getActiveBoosts(data, user) {
     const eventLuck = data.globalEvent.luckBonus || 0;
     const eventCatch = data.globalEvent.catchRateBonus || 0;
 
-    // Total stats calculation
     const totalLuckBoost = bestGun.luckBoost + highestCharmLuck + weatherLuck + eventLuck;
     const totalCatchRateBoost = weatherCatch + eventCatch;
     const totalLuckMultiplier = 1 + totalLuckBoost;
@@ -245,12 +237,9 @@ function trackQuestProgress(user, actionType, count = 1) {
     }
 }
 
-// Check and automatically grant rewards if quest completed
 function checkAndClaimQuests(user) {
     let claimedRewards = [];
-    const now = Date.now();
 
-    // Check Daily Quests
     if (!user.quests.dailyCompleted && user.quests.daily && user.quests.daily.length > 0) {
         let allDone = true;
         for (const task of user.quests.daily) {
@@ -271,7 +260,6 @@ function checkAndClaimQuests(user) {
         }
     }
 
-    // Check Weekly Quests
     if (!user.quests.weeklyCompleted && user.quests.weekly && user.quests.weekly.length > 0) {
         let allDone = true;
         for (const task of user.quests.weekly) {
@@ -294,7 +282,7 @@ function checkAndClaimQuests(user) {
     return claimedRewards;
 }
 
-// Custom Rarity Icons
+// --- ONLY EMOJI RARITY ICONS (No Text Labels) ---
 const RARITY_ICONS = {
     'Common': '<:common:1570576518206333098>',
     'Uncommon': '<:uncommon:1570576547298021437>',
@@ -417,38 +405,39 @@ function formatTitleDisplay(titleName) {
     return `\`${titleName}\``;
 }
 
-// --- REWORKED CLEAN COLLECTION DISPLAY ---
-function buildCollectionDisplay(userObj, username, userId) {
+// --- REWORKED CLEAN COLLECTION DISPLAY WITH RARITY EMOJIS ONLY ---
+function buildCollectionDisplay(userObj, username) {
     const embed = new EmbedBuilder()
         .setTitle(`📜 ${username}'s Animal Collection`)
         .setColor('#9900ff')
         .setTimestamp();
 
-    const tierGroups = {
-        'C': HUNT_ANIMALS.filter(a => a.tier === 'Common'),
-        'U': HUNT_ANIMALS.filter(a => a.tier === 'Uncommon'),
-        'R': HUNT_ANIMALS.filter(a => a.tier === 'Rare'),
-        'E': HUNT_ANIMALS.filter(a => a.tier === 'Epic'),
-        'L': HUNT_ANIMALS.filter(a => a.tier === 'Legendary'),
-        'M': HUNT_ANIMALS.filter(a => a.tier === 'Mythic'),
-        'S+': HUNT_ANIMALS.filter(a => a.tier === 'S+ Tier'),
-        'SS+': HUNT_ANIMALS.filter(a => a.tier === 'SS+ Tier'),
-        'SSS+': HUNT_ANIMALS.filter(a => a.tier === 'SSS+ Tier'),
-        'GOD': HUNT_ANIMALS.filter(a => a.tier === 'GOD Tier' || a.tier === 'Shiny')
-    };
+    const tierGroups = [
+        { label: `${RARITY_ICONS['Common']} >`, animals: HUNT_ANIMALS.filter(a => a.tier === 'Common') },
+        { label: `${RARITY_ICONS['Uncommon']} >`, animals: HUNT_ANIMALS.filter(a => a.tier === 'Uncommon') },
+        { label: `${RARITY_ICONS['Rare']} >`, animals: HUNT_ANIMALS.filter(a => a.tier === 'Rare') },
+        { label: `${RARITY_ICONS['Epic']} >`, animals: HUNT_ANIMALS.filter(a => a.tier === 'Epic') },
+        { label: `${RARITY_ICONS['Legendary']} >`, animals: HUNT_ANIMALS.filter(a => a.tier === 'Legendary') },
+        { label: `${RARITY_ICONS['Mythic']} >`, animals: HUNT_ANIMALS.filter(a => a.tier === 'Mythic') },
+        { label: `${RARITY_ICONS['S+ Tier']} >`, animals: HUNT_ANIMALS.filter(a => a.tier === 'S+ Tier') },
+        { label: `${RARITY_ICONS['SS+ Tier']} >`, animals: HUNT_ANIMALS.filter(a => a.tier === 'SS+ Tier') },
+        { label: `${RARITY_ICONS['SSS+ Tier']} >`, animals: HUNT_ANIMALS.filter(a => a.tier === 'SSS+ Tier') },
+        { label: `${RARITY_ICONS['GOD Tier']} >`, animals: HUNT_ANIMALS.filter(a => a.tier === 'GOD Tier') },
+        { label: `${RARITY_ICONS['Shiny']} >`, animals: HUNT_ANIMALS.filter(a => a.tier === 'Shiny') }
+    ];
 
     let hasAny = false;
-    for (const [key, animals] of Object.entries(tierGroups)) {
+    for (const group of tierGroups) {
         const lines = [];
-        for (const animal of animals) {
+        for (const animal of group.animals) {
             const count = userObj.collection[animal.name] || 0;
             if (count > 0) {
                 hasAny = true;
-                lines.append ? lines.append() : lines.push(`${animal.badge} **${animal.name}**: \`${count}x\``);
+                lines.push(`${animal.badge} **${animal.name}**: \`${count}x\``);
             }
         }
         if (lines.length > 0) {
-            embed.addFields({ name: `${key} >`, value: lines.join(' | '), inline: false });
+            embed.addFields({ name: group.label, value: lines.join(' | '), inline: false });
         }
     }
 
@@ -459,7 +448,6 @@ function buildCollectionDisplay(userObj, username, userId) {
     return { embeds: [embed] };
 }
 
-// Weighted Animal Picker helper
 function pickWeightedAnimal(animalsPool, totalLuckMultiplier, flatCatchBonus) {
     const weightedList = animalsPool.map(animal => {
         const rankScale = 1 + (animal.rank * 0.15 * (totalLuckMultiplier - 1));
@@ -561,7 +549,8 @@ const commands = [
         )),
     new SlashCommandBuilder().setName('admin-reset-account').setDescription('Admin: Reset all data for a user or entire db')
         .addUserOption(o => o.setName('target').setDescription('Target user (leave blank to reset all)').setRequired(false)),
-    new SlashCommandBuilder().setName('admin-give-permission').setDescription('Owner only: Grant admin permissions.'),
+    new SlashCommandBuilder().setName('admin-give-permission').setDescription('Owner only: Grant admin permissions.')
+        .addUserOption(o => o.setName('user').setDescription('User to grant admin rights').setRequired(true)),
     new SlashCommandBuilder().setName('admin-luck-event').setDescription('Admin: Start timed global luck event')
         .addNumberOption(o => o.setName('amount').setDescription('Boost amount').setRequired(true))
         .addStringOption(o => o.setName('time').setDescription('Duration (e.g. 30s, 1h)').setRequired(true)),
@@ -577,7 +566,6 @@ client.once('ready', async () => {
     console.log('Slash commands synchronized.');
 });
 
-// Bot Status update representing how many servers are playing
 setInterval(() => {
     const serverCount = client.guilds.cache.size;
     client.user.setActivity(`with ${serverCount} servers | /hunt`, { type: 0 });
@@ -595,9 +583,7 @@ function checkCooldown(user, commandName, seconds = 2) {
 }
 
 client.on('interactionCreate', async interaction => {
-    // --- INTERACTIVE BUTTONS (Collection Sort & Trade UI) ---
     if (interaction.isButton()) {
-        const data = readData();
         if (interaction.customId.startsWith('trade_offer_')) {
             const parts = interaction.customId.split('_');
             const targetId = parts[2];
@@ -637,7 +623,6 @@ client.on('interactionCreate', async interaction => {
     const data = readData();
     const user = getUser(data, interaction.user.id);
 
-    // Permission check for admin commands
     const isAdminCommand = commandName.startsWith('admin-');
     if (isAdminCommand) {
         const isOwner = interaction.user.id === interaction.guild?.ownerId || data.admins.includes(interaction.user.id) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
@@ -782,7 +767,7 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply(`🧠 Hard Trivia Solved! You answered correctly and earned **${reward.toLocaleString()} coins**!`);
         }
 
-        // --- SHOP (/shop) ---
+        // --- SHOP ---
         else if (commandName === 'shop') {
             const category = interaction.options.getString('category');
             const embed = new EmbedBuilder().setTitle('🛒 Shop & Weapon Armory').setColor('#00ffcc');
@@ -802,13 +787,12 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // --- BUY (/buy) ---
+        // --- BUY ---
         else if (commandName === 'buy') {
             const id = interaction.options.getInteger('id');
             const item = data.shopItems.find(i => i.id === id);
             if (!item) return interaction.reply({ content: '❌ Item not found in shop.', ephemeral: true });
 
-            // Ensure non-stackable charm check
             if (item.category === 'Charm' && user.inventory.includes(item.name)) {
                 return interaction.reply({ content: `❌ You already own **${item.name}**! Charms cannot be stacked.`, ephemeral: true });
             }
@@ -829,7 +813,6 @@ client.on('interactionCreate', async interaction => {
 
             if (qty <= 0 || amount <= 0) return interaction.reply({ content: '❌ Quantity and amount must be greater than zero.', ephemeral: true });
 
-            // Check if user has item or animal
             let isAnimal = HUNT_ANIMALS.some(a => a.name.toLowerCase() === typeName.toLowerCase());
             let isItem = user.inventory.includes(typeName);
 
@@ -851,7 +834,6 @@ client.on('interactionCreate', async interaction => {
                     price: amount
                 });
             } else if (isItem) {
-                // Count occurrences in inventory
                 let count = user.inventory.filter(i => i.toLowerCase() === typeName.toLowerCase()).length;
                 if (count < qty) {
                     return interaction.reply({ content: `❌ You do not have ${qty}x **${typeName}** in your inventory.`, ephemeral: true });
@@ -900,7 +882,6 @@ client.on('interactionCreate', async interaction => {
             const sellerUser = getUser(data, listing.sellerId);
             sellerUser.wallet += listing.price;
 
-            // Transfer items/animals to buyer
             if (listing.type === 'Animal') {
                 if (!user.collection[listing.name]) user.collection[listing.name] = 0;
                 user.collection[listing.name] += listing.quantity;
@@ -910,14 +891,13 @@ client.on('interactionCreate', async interaction => {
                 }
             }
 
-            // Remove listing
             data.marketListings = data.marketListings.filter(l => l.id !== id);
             saveData(data);
 
             return interaction.reply(`✅ Successfully purchased ${listing.quantity}x **${listing.name}** from **${listing.sellerName}** for 🪙 ${listing.price.toLocaleString()} coins!`);
         }
 
-        // --- HUNTING REWORK (No coin earnings, drops boxes/lootboxes, gun hunt counts) ---
+        // --- HUNT (Rarity Emoji Only Display) ---
         else if (commandName === 'hunt') {
             const boosts = getActiveBoosts(data, user);
             const huntCount = boosts.huntCount;
@@ -930,18 +910,15 @@ client.on('interactionCreate', async interaction => {
             let totalBoxesFound = 0;
 
             for (let i = 0; i < huntCount; i++) {
-                // Box drop from hunt
-                let droppedBox = null;
                 const rollBox = Math.random();
                 const boxMultiplier = boosts.totalLuckMultiplier + (boosts.flatCatchBonus * 0.5);
 
-                if (rollBox < 0.005 * boxMultiplier) { droppedBox = 'GOD'; user.boxes.GOD++; totalBoxesFound++; }
-                else if (rollBox < 0.01 * boxMultiplier) { droppedBox = 'Legendary'; user.boxes.Legendary++; totalBoxesFound++; }
-                else if (rollBox < 0.03 * boxMultiplier) { droppedBox = 'Ultra'; user.boxes.Ultra++; totalBoxesFound++; }
-                else if (rollBox < 0.06 * boxMultiplier) { droppedBox = 'Epic'; user.boxes.Epic++; totalBoxesFound++; }
-                else if (rollBox < 0.10 * boxMultiplier) { droppedBox = 'Rare'; user.boxes.Rare++; totalBoxesFound++; }
+                if (rollBox < 0.005 * boxMultiplier) { user.boxes.GOD++; totalBoxesFound++; }
+                else if (rollBox < 0.01 * boxMultiplier) { user.boxes.Legendary++; totalBoxesFound++; }
+                else if (rollBox < 0.03 * boxMultiplier) { user.boxes.Ultra++; totalBoxesFound++; }
+                else if (rollBox < 0.06 * boxMultiplier) { user.boxes.Epic++; totalBoxesFound++; }
+                else if (rollBox < 0.10 * boxMultiplier) { user.boxes.Rare++; totalBoxesFound++; }
 
-                // Shiny chance boosted by Charms, Guns, Weather & Timed Events
                 let caught = null;
                 const shinyChance = (0.001 * boosts.totalLuckMultiplier) + (boosts.flatCatchBonus * 0.01);
 
@@ -955,7 +932,7 @@ client.on('interactionCreate', async interaction => {
 
                 if (!user.collection[caught.name]) user.collection[caught.name] = 0;
                 user.collection[caught.name]++;
-                caughtSummary.push(`${caught.badge} **${caught.name}** (${caught.tier})`);
+                caughtSummary.push(`${RARITY_ICONS[caught.tier]} ${caught.badge} **${caught.name}**`);
             }
 
             trackQuestProgress(user, 'hunt', huntCount);
@@ -964,7 +941,7 @@ client.on('interactionCreate', async interaction => {
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
 
-            embed.setDescription(`You fired your weapon and completed **${huntCount} hunts**!\n\n**Animals Caught:**\n${caughtSummary.join('\n')}`);
+            embed.setDescription(`You fired your weapon and completed **${huntCount} hunts**!\n\n**Animals Caught:**\n${caughtSummary.slice(0, 20).join('\n')}${caughtSummary.length > 20 ? `\n*(And ${caughtSummary.length - 20} more)*` : ''}`);
             if (totalBoxesFound > 0) {
                 embed.addFields({ name: '🎁 Boxes Found', value: `Found **${totalBoxesFound}** mystery boxes during the hunt!` });
             }
@@ -975,7 +952,7 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // --- LOOTBOX WITH QUANTITY SUPPORT (/lootbox) ---
+        // --- LOOTBOX WITH QUANTITY SUPPORT (Rarity Emoji Only Display) ---
         else if (commandName === 'lootbox') {
             const qty = interaction.options.getInteger('quantity') || 1;
             if (qty <= 0) return interaction.reply({ content: '❌ Quantity must be at least 1.', ephemeral: true });
@@ -996,17 +973,17 @@ client.on('interactionCreate', async interaction => {
                     const shiny = shinyAnimals[Math.floor(Math.random() * shinyAnimals.length)];
                     if (!user.collection[shiny.name]) user.collection[shiny.name] = 0;
                     user.collection[shiny.name]++;
-                    rewardsSummary.push(`✨ Shiny Animal: ${shiny.badge} **${shiny.name}**`);
+                    rewardsSummary.push(`${RARITY_ICONS['Shiny']} ${shiny.badge} **${shiny.name}**`);
                 } else if (Math.random() < 0.5) {
                     const coinAmt = Math.floor(Math.random() * 5000) + 1;
                     user.wallet += coinAmt;
-                    rewardsSummary.push(`🪙 Coins: ${coinAmt.toLocaleString()}`);
+                    rewardsSummary.push(`🪙 ${coinAmt.toLocaleString()} coins`);
                 } else {
                     const standardAnimals = HUNT_ANIMALS.filter(a => a.tier !== 'Shiny');
                     const randAnimal = pickWeightedAnimal(standardAnimals, boosts.totalLuckMultiplier, boosts.flatCatchBonus);
                     if (!user.collection[randAnimal.name]) user.collection[randAnimal.name] = 0;
                     user.collection[randAnimal.name]++;
-                    rewardsSummary.push(`🐾 Animal: ${randAnimal.badge} **${randAnimal.name}** (${randAnimal.tier})`);
+                    rewardsSummary.push(`${RARITY_ICONS[randAnimal.tier]} ${randAnimal.badge} **${randAnimal.name}**`);
                 }
             }
 
@@ -1027,7 +1004,7 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // --- OPEN BOXES WITH QUANTITY SUPPORT (/open) ---
+        // --- OPEN BOXES WITH QUANTITY SUPPORT (Rarity Emoji Only Display) ---
         else if (commandName === 'open') {
             const boxRarity = interaction.options.getString('rarity');
             const qty = interaction.options.getInteger('quantity') || 1;
@@ -1054,7 +1031,7 @@ client.on('interactionCreate', async interaction => {
                 if (Math.random() < 0.5) {
                     const coinDrop = Math.floor(Math.random() * maxCoins) + 1;
                     user.wallet += coinDrop;
-                    rewardsSummary.push(`🪙 Coins: ${coinDrop.toLocaleString()}`);
+                    rewardsSummary.push(`🪙 ${coinDrop.toLocaleString()} coins`);
                 } else {
                     const effectiveShinyChance = (baseShinyChance * boosts.totalLuckMultiplier) + (boosts.flatCatchBonus * 0.01);
                     if (Math.random() < effectiveShinyChance) {
@@ -1062,13 +1039,13 @@ client.on('interactionCreate', async interaction => {
                         const sAnimal = shinyAnimals[Math.floor(Math.random() * shinyAnimals.length)];
                         if (!user.collection[sAnimal.name]) user.collection[sAnimal.name] = 0;
                         user.collection[sAnimal.name]++;
-                        rewardsSummary.push(`✨ Shiny Animal Drop: ${sAnimal.badge} **${sAnimal.name}**`);
+                        rewardsSummary.push(`${RARITY_ICONS['Shiny']} ${sAnimal.badge} **${sAnimal.name}**`);
                     } else {
                         const eligibleAnimals = HUNT_ANIMALS.filter(a => a.rank <= maxRank && a.tier !== 'Shiny');
                         const chosen = pickWeightedAnimal(eligibleAnimals, boosts.totalLuckMultiplier, boosts.flatCatchBonus);
                         if (!user.collection[chosen.name]) user.collection[chosen.name] = 0;
                         user.collection[chosen.name]++;
-                        rewardsSummary.push(`🐾 Animal Drop: ${chosen.badge} **${chosen.name}** (${chosen.tier})`);
+                        rewardsSummary.push(`${RARITY_ICONS[chosen.tier]} ${chosen.badge} **${chosen.name}**`);
                     }
                 }
             }
@@ -1128,7 +1105,7 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply(`🎁 Weekly Claimed! Received 3x ${LOOTBOX_ICON} Lootboxes, 1x ${BOX_ICONS['Epic']} Epic Box, and 1x ${BOX_ICONS['Legendary']} Legendary Box!`);
         }
 
-        // --- QUEST (Automatic rewards & status) ---
+        // --- QUEST ---
         else if (commandName === 'quest') {
             const now = Date.now();
             const dayMs = 24 * 60 * 60 * 1000;
@@ -1185,14 +1162,14 @@ client.on('interactionCreate', async interaction => {
                 .addFields(
                     { name: '🍀 [luck]', value: `**+${Math.round(boosts.totalLuckBoost * 100)}%** total luck boost (Gun: +${Math.round(boosts.gunLuck*100)}%, Charm: +${Math.round(boosts.charmLuck*100)}%, Weather: +${Math.round(boosts.weatherLuck*100)}%, Event: +${Math.round(boosts.eventLuck*100)}%)`, inline: false },
                     { name: '🎯 [boost rate]', value: `**+${boosts.totalCatchRateBoost}%** catch rate boost (Weather: +${boosts.weatherCatch}%, Event: +${boosts.eventCatch}%)`, inline: false },
-                    { name: '🔫 Weapon Hunt Power', value: `Hunts **${boosts.huntCount}** animals per `/hunt` command`, inline: false }
+                    { name: '🔫 Weapon Hunt Power', value: `Hunts **${boosts.huntCount}** animals per \`/hunt\` command`, inline: false }
                 );
             return interaction.reply({ embeds: [embed] });
         }
 
         // --- REWORKED COLLECTION (/collection) ---
         else if (commandName === 'collection') {
-            const payload = buildCollectionDisplay(user, interaction.user.username, interaction.user.id);
+            const payload = buildCollectionDisplay(user, interaction.user.username);
             return interaction.reply(payload);
         }
 
@@ -1387,7 +1364,7 @@ client.on('interactionCreate', async interaction => {
 
             saveData(data);
             await checkAndAwardTitles(targetData, target, interaction);
-            return interaction.reply({ content: `🛠️ Admin: Added 1x ${foundAnimal.badge} **${foundAnimal.name}** to ${target.tag}'s collection!`, ephemeral: true });
+            return interaction.reply({ content: `🛠️ Admin: Added 1x ${RARITY_ICONS[foundAnimal.tier]} ${foundAnimal.badge} **${foundAnimal.name}** to ${target.tag}'s collection!`, ephemeral: true });
         }
 
         else if (commandName === 'admin-give-title') {
@@ -1494,4 +1471,4 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN);                                              
