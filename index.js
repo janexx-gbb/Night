@@ -112,7 +112,7 @@ function getUser(data, userId) {
             exp: 0,
             points: 0,
             team: [null, null, null],
-            animalLevels: {}, // { animalName: { level, exp } }
+            animalLevels: {},
             badges: [],
             totalHunts: 0,
             quests: { daily: [], dailyProgress: {}, dailyCompleted: false, dailyReset: 0, weekly: [], weeklyProgress: {}, weeklyCompleted: false, weeklyReset: 0 }
@@ -134,7 +134,7 @@ function getUser(data, userId) {
     return u;
 }
 
-// --- FORMAT CURRENCY TO SHORT FORMAT (e.g. 10M, 1.5B, etc.) ---
+// --- CURRENCY SHORT FORMATTER (e.g. 10M, 1.5B) ---
 function formatCurrency(amount) {
     if (amount >= 1e12) return (amount / 1e12).toFixed(1).replace(/\.0$/, '') + 'T';
     if (amount >= 1e9) return (amount / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
@@ -143,9 +143,7 @@ function formatCurrency(amount) {
     return amount.toLocaleString();
 }
 
-// --- AUTOMATIC BADGE & RANK CHECKER ---
 function updateBadgesAndRanks(user, userId, data) {
-    // 1. Hunt Badges
     const huntBadges = [
         { count: 50000, emoji: '<:50khunts:1571018959904313364>' },
         { count: 30000, emoji: '<:30khunts:1571018894754193469>' },
@@ -160,7 +158,6 @@ function updateBadgesAndRanks(user, userId, data) {
         }
     }
 
-    // 2. Level Badges
     const levelBadges = [
         { level: 150, emoji: '<:lvl150:1571012977744805990>' },
         { level: 50, emoji: '<:lvl50:1571012702250475601>' },
@@ -171,14 +168,8 @@ function updateBadgesAndRanks(user, userId, data) {
             user.badges.push(b.emoji);
         }
     }
-
-    // 3. Owner / Staff badges
-    if (userId === 'YOUR_OWNER_DISCORD_ID_HERE' && !user.badges.includes('<:owner:1571013065644711936>')) {
-        user.badges.push('<:owner:1571013065644711936>');
-    }
 }
 
-// Get Rank Icon based on Points
 function getRankBadge(points) {
     if (points >= 10000) return '<:10000pts:1571018412464021504>';
     if (points >= 6000) return '<:6000pts:1571018312626872421>';
@@ -188,7 +179,6 @@ function getRankBadge(points) {
     return '<:1000pts:1571018024838893678>';
 }
 
-// --- WEATHER AUTOMATIC ROTATION ---
 function updateWeatherIfNeeded(data) {
     const now = Date.now();
     if (!data.currentWeather || now > data.currentWeather.expiresAt) {
@@ -283,7 +273,6 @@ function getActiveBoosts(data, user) {
     };
 }
 
-// --- QUEST PROGRESS TRACKER ---
 function trackQuestProgress(user, actionType, count = 1) {
     if (!user.quests.dailyCompleted && user.quests.daily) {
         for (const task of user.quests.daily) {
@@ -346,7 +335,6 @@ function checkAndClaimQuests(user) {
     return claimedRewards;
 }
 
-// --- UPDATED RARITY ICONS (Including S+, SS+, SSS+ Reworks) ---
 const RARITY_ICONS = {
     'Common': '<:common:1570576518206333098>',
     'Uncommon': '<:uncommon:1570576547298021437>',
@@ -370,7 +358,6 @@ const BOX_ICONS = {
     'GOD': '<:godtier:1570562525274316920>'
 };
 
-// Animal Database with Hunt Exp mapping
 const HUNT_ANIMALS = [
     { name: 'Worm', tier: 'Common', rank: 1, badge: '🐛', rate: 0.85, reward: 50, minExp: 20, maxExp: 50 },
     { name: 'Dog', tier: 'Common', rank: 1, badge: '🐕', rate: 0.85, reward: 60, minExp: 20, maxExp: 50 },
@@ -411,7 +398,6 @@ const HUNT_ANIMALS = [
     { name: 'Shiny Dolphin', tier: 'Shiny', rank: 11, badge: '<:Shinydolphin:1570467326573416602>', rate: 0.001, reward: 250000, minExp: 8000, maxExp: 10000 }
 ];
 
-// Calculate stats for an animal based on Tier and Level
 function getAnimalStats(animalName, level = 1) {
     const animal = HUNT_ANIMALS.find(a => a.name === animalName);
     if (!animal) return { hp: 100, atk: 20, def: 10 };
@@ -440,19 +426,17 @@ function getAnimalStats(animalName, level = 1) {
     };
 }
 
-// Add user EXP and handle level ups (0/1500 for lvl 1, 0/2500 per subsequent lvl)
 function addUserExp(user, amount) {
     user.exp += amount;
     let neededExp = user.level === 1 ? 1500 : 2500;
     while (user.exp >= neededExp) {
         user.exp -= neededExp;
         user.level++;
-        neededExp = 2500; // 0/2500 per user lvl after
+        neededExp = 2500;
     }
     updateBadgesAndRanks(user, '', null);
 }
 
-// Add animal EXP and handle level ups (0/2000 for lvl 1, 0/3500 per subsequent lvl)
 function addAnimalExp(user, animalName, amount) {
     if (!user.animalLevels[animalName]) {
         user.animalLevels[animalName] = { level: 1, exp: 0 };
@@ -525,7 +509,7 @@ function formatTitleDisplay(titleName) {
     return `\`${titleName}\``;
 }
 
-// --- CLEAN COLLECTION DISPLAY (No ">" or Text labels, only Icon) ---
+// --- REWORKED COLLECTION DISPLAY (Icon Only + Quantity Format: [Rarity] - 🐋 [quantity] 🐧 [quantity]) ---
 function buildCollectionDisplay(userObj, username) {
     const embed = new EmbedBuilder()
         .setTitle(`📜 ${username}'s Animal Collection`)
@@ -548,16 +532,16 @@ function buildCollectionDisplay(userObj, username) {
 
     let hasAny = false;
     for (const group of tierGroups) {
-        const lines = [];
+        const parts = [];
         for (const animal of group.animals) {
             const count = userObj.collection[animal.name] || 0;
             if (count > 0) {
                 hasAny = true;
-                lines.push(`${animal.badge} **${animal.name}**: \`${count}x\``);
+                parts.push(`${animal.badge} \`${count}x\``);
             }
         }
-        if (lines.length > 0) {
-            embed.addFields({ name: group.icon, value: lines.join(' | '), inline: false });
+        if (parts.length > 0) {
+            embed.addFields({ name: group.icon, value: parts.join(' | '), inline: false });
         }
     }
 
@@ -587,7 +571,6 @@ function pickWeightedAnimal(animalsPool, totalLuckMultiplier, flatCatchBonus) {
     return weightedList[0].animal;
 }
 
-// Slash Commands Definition
 const commands = [
     new SlashCommandBuilder().setName('balance').setDescription('Check wallet and bank balance.')
         .addUserOption(o => o.setName('user').setDescription('User to check').setRequired(false)),
@@ -654,7 +637,6 @@ const commands = [
     new SlashCommandBuilder().setName('trade').setDescription('Interactive trade offer with another user.')
         .addUserOption(o => o.setName('target').setDescription('Trade partner').setRequired(true)),
     
-    // New Admin Commands
     new SlashCommandBuilder().setName('admin-give-coins').setDescription('Admin: Give coins').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
         .addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true)),
@@ -1134,7 +1116,6 @@ client.on('interactionCreate', async interaction => {
             const challenger = user;
             const opponent = getUser(data, target.id);
 
-            // Calculate Challenger Power from Team
             let challengerPower = 0;
             for (const petName of challenger.team) {
                 if (petName) {
@@ -1143,9 +1124,8 @@ client.on('interactionCreate', async interaction => {
                     challengerPower += (st.hp + (st.atk * 2) + st.def);
                 }
             }
-            if (challengerPower === 0) challengerPower = 50; // base power if empty team
+            if (challengerPower === 0) challengerPower = 50;
 
-            // Calculate Opponent Power from Team
             let opponentPower = 0;
             for (const petName of opponent.team) {
                 if (petName) {
@@ -1156,7 +1136,6 @@ client.on('interactionCreate', async interaction => {
             }
             if (opponentPower === 0) opponentPower = 50;
 
-            // RNG variance
             const roll1 = challengerPower * (0.8 + Math.random() * 0.4);
             const roll2 = opponentPower * (0.8 + Math.random() * 0.4);
 
@@ -1241,7 +1220,7 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // --- HUNT (Grants EXP, Hunts, and Badges) ---
+        // --- HUNT ---
         else if (commandName === 'hunt') {
             const boosts = getActiveBoosts(data, user);
             const huntCount = boosts.huntCount;
@@ -1279,7 +1258,6 @@ client.on('interactionCreate', async interaction => {
                 user.collection[caught.name]++;
                 caughtSummary.push(`${RARITY_ICONS[caught.tier]} ${caught.badge} **${caught.name}**`);
 
-                // Add Exp
                 const expGain = Math.floor(Math.random() * (caught.maxExp - caught.minExp + 1)) + caught.minExp;
                 totalExpGained += expGain;
             }
