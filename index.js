@@ -143,6 +143,40 @@ function formatCurrency(amount) {
     return amount.toLocaleString();
 }
 
+// --- DYNAMIC LEVEL & EXP FORMULAS ---
+function getUserMaxExp(level) {
+    return 2500 + ((level - 1) * 6000);
+}
+
+function getAnimalMaxExp(level) {
+    return 5000 + ((level - 1) * 7500);
+}
+
+function addUserExp(user, amount) {
+    user.exp += amount;
+    let neededExp = getUserMaxExp(user.level);
+    while (user.exp >= neededExp) {
+        user.exp -= neededExp;
+        user.level++;
+        neededExp = getUserMaxExp(user.level);
+    }
+    updateBadgesAndRanks(user, '', null);
+}
+
+function addAnimalExp(user, animalName, amount) {
+    if (!user.animalLevels[animalName]) {
+        user.animalLevels[animalName] = { level: 1, exp: 0 };
+    }
+    const pet = user.animalLevels[animalName];
+    pet.exp += amount;
+    let neededExp = getAnimalMaxExp(pet.level);
+    while (pet.exp >= neededExp) {
+        pet.exp -= neededExp;
+        pet.level++;
+        neededExp = getAnimalMaxExp(pet.level);
+    }
+}
+
 function updateBadgesAndRanks(user, userId, data) {
     const huntBadges = [
         { count: 50000, emoji: '<:50khunts:1571018959904313364>' },
@@ -426,31 +460,6 @@ function getAnimalStats(animalName, level = 1) {
     };
 }
 
-function addUserExp(user, amount) {
-    user.exp += amount;
-    let neededExp = user.level === 1 ? 1500 : 2500;
-    while (user.exp >= neededExp) {
-        user.exp -= neededExp;
-        user.level++;
-        neededExp = 2500;
-    }
-    updateBadgesAndRanks(user, '', null);
-}
-
-function addAnimalExp(user, animalName, amount) {
-    if (!user.animalLevels[animalName]) {
-        user.animalLevels[animalName] = { level: 1, exp: 0 };
-    }
-    const pet = user.animalLevels[animalName];
-    pet.exp += amount;
-    let neededExp = pet.level === 1 ? 2000 : 3500;
-    while (pet.exp >= neededExp) {
-        pet.exp -= neededExp;
-        pet.level++;
-        neededExp = 3500;
-    }
-}
-
 const TITLES_DATA = {
     'Beta': { category: 'Special', desc: 'Given only to beta users or admins' },
     'Admin': { category: 'Special', desc: 'Special title for Admin' },
@@ -509,7 +518,7 @@ function formatTitleDisplay(titleName) {
     return `\`${titleName}\``;
 }
 
-// --- REWORKED COLLECTION DISPLAY (Icon Only + Quantity Format: [Rarity] - 🐋 [quantity] 🐧 [quantity]) ---
+// --- ICON ONLY COLLECTION FORMAT: [Rarity] - 🐋 [quantity] 🐧 [quantity] ---
 function buildCollectionDisplay(userObj, username) {
     const embed = new EmbedBuilder()
         .setTitle(`📜 ${username}'s Animal Collection`)
@@ -1045,17 +1054,17 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply(`✅ Successfully equipped **${foundAnimal.badge} ${foundAnimal.name}** into Team Slot **${slot + 1}**!`);
         }
 
-        // --- LEVEL & EXP (/level) ---
+        // --- LEVEL & EXP WITH DYNAMIC SCALING (/level) ---
         else if (commandName === 'level') {
             const target = interaction.options.getUser('user') || interaction.user;
             const tData = getUser(data, target.id);
 
-            const userNeededExp = tData.level === 1 ? 1500 : 2500;
+            const userNeededExp = getUserMaxExp(tData.level);
             const embed = new EmbedBuilder()
                 .setTitle(`📊 ${target.username}'s Level & EXP Status`)
                 .setColor('#00ffcc')
                 .addFields(
-                    { name: '👤 User Level', value: `Level **${tData.level}** (${tData.exp}/${userNeededExp} EXP)`, inline: false }
+                    { name: '👤 User Level', value: `Level **${tData.level}** (${tData.exp.toLocaleString()}/${userNeededExp.toLocaleString()} EXP)`, inline: false }
                 );
 
             const teamLines = [];
@@ -1063,9 +1072,9 @@ client.on('interactionCreate', async interaction => {
                 const petName = tData.team[i];
                 if (petName) {
                     const petData = tData.animalLevels[petName] || { level: 1, exp: 0 };
-                    const petNeededExp = petData.level === 1 ? 2000 : 3500;
+                    const petNeededExp = getAnimalMaxExp(petData.level);
                     const animalObj = HUNT_ANIMALS.find(a => a.name === petName);
-                    teamLines.push(`Slot ${i+1}: ${animalObj?.badge || '🐾'} **${petName}** — Lvl **${petData.level}** (${petData.exp}/${petNeededExp} EXP)`);
+                    teamLines.push(`Slot ${i+1}: ${animalObj?.badge || '🐾'} **${petName}** — Lvl **${petData.level}** (${petData.exp.toLocaleString()}/${petNeededExp.toLocaleString()} EXP)`);
                 } else {
                     teamLines.push(`Slot ${i+1}: *Empty*`);
                 }
@@ -1506,7 +1515,7 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // --- REWORKED COLLECTION (/collection) ---
+        // --- COLLECTION ---
         else if (commandName === 'collection') {
             const payload = buildCollectionDisplay(user, interaction.user.username);
             return interaction.reply(payload);
