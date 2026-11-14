@@ -12,13 +12,15 @@ const {
 } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.DirectMessages
     ]
 });
 
@@ -105,6 +107,7 @@ function getUser(data, userId) {
             cooldowns: {},
             titles: [],
             equippedTitle: null,
+            started: false, // Required check for /start
             dailyStreak: 0,
             lastDailyTimestamp: 0,
             lastWeeklyTimestamp: 0,
@@ -120,6 +123,7 @@ function getUser(data, userId) {
         saveData(data);
     }
     const u = data.users[userId];
+    if (u.started === undefined) u.started = false;
     if (!Array.isArray(u.titles)) u.titles = [];
     if (!u.boxes) u.boxes = { Rare: 0, Epic: 0, Ultra: 0, Legendary: 0, GOD: 0 };
     if (!u.lootboxes) u.lootboxes = 0;
@@ -134,7 +138,7 @@ function getUser(data, userId) {
     return u;
 }
 
-// --- CURRENCY SHORT FORMATTER (e.g. 10M, 1.5B) ---
+// --- CURRENCY SHORT FORMATTER ---
 function formatCurrency(amount) {
     if (amount >= 1e12) return (amount / 1e12).toFixed(1).replace(/\.0$/, '') + 'T';
     if (amount >= 1e9) return (amount / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
@@ -374,7 +378,7 @@ const RARITY_ICONS = {
     'Uncommon': '<:uncommon:1570576547298021437>',
     'Rare': '<:rare:1570576572044279918>',
     'Epic': '<:epic:1570576596413190154>',
-    'Legendary': '<:legendary:1570576620383641610>',
+    'Legendary': '<:legendary:1570562590529159210>',
     'Mythic': '<:mythical:1570576640247861449>',
     'S+ Tier': '<:stier:1571017458419109989>',
     'SS+ Tier': '<:sstier:1571017591189807104>',
@@ -518,7 +522,7 @@ function formatTitleDisplay(titleName) {
     return `\`${titleName}\``;
 }
 
-// --- ICON ONLY COLLECTION FORMAT: [Rarity] - 🐋 [quantity] 🐧 [quantity] ---
+// --- ICON ONLY COLLECTION FORMAT (No Line Borders on Embeds) ---
 function buildCollectionDisplay(userObj, username) {
     const embed = new EmbedBuilder()
         .setTitle(`📜 ${username}'s Animal Collection`)
@@ -555,7 +559,7 @@ function buildCollectionDisplay(userObj, username) {
     }
 
     if (!hasAny) {
-        embed.setDescription('Your collection is empty! Buy a weapon in `/shop` and use `/hunt`.');
+        embed.setDescription('Your collection is empty! Use `/hunt` to discover creatures.');
     }
 
     return { embeds: [embed] };
@@ -580,8 +584,29 @@ function pickWeightedAnimal(animalsPool, totalLuckMultiplier, flatCatchBonus) {
     return weightedList[0].animal;
 }
 
+// --- HELPER FUNCTION TO FETCH MEMES ---
+function fetchMeme() {
+    return new Promise((resolve, reject) => {
+        https.get('https://meme-api.com/gimme', (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    const json = JSON.parse(data);
+                    resolve(json);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        }).on('error', err => reject(err));
+    });
+}
+
 const commands = [
-    new SlashCommandBuilder().setName('balance').setDescription('Check wallet and bank balance.')
+    new SlashCommandBuilder().setName('start').setDescription('Initialize your profile and claim your Beta title.'),
+    new SlashCommandBuilder().setName('help').setDescription('List all available bot commands.'),
+    new SlashCommandBuilder().setName('rank').setDescription('Check your current points and rank tier badge.'),
+    new SlashCommandBuilder().setName('balance').setDescription('Check your wallet and bank balance.')
         .addUserOption(o => o.setName('user').setDescription('User to check').setRequired(false)),
     new SlashCommandBuilder().setName('beg').setDescription('Beg for quick starter coins.'),
     new SlashCommandBuilder().setName('work').setDescription('Work to earn coins.'),
@@ -597,6 +622,9 @@ const commands = [
         .addStringOption(o => o.setName('category').setDescription('Shop category').setRequired(false).addChoices({name:'Gun', value:'Gun'}, {name:'Charm', value:'Charm'})),
     new SlashCommandBuilder().setName('buy').setDescription('Buy an item from the shop.')
         .addIntegerOption(o => o.setName('id').setDescription('Item ID').setRequired(true)),
+    new SlashCommandBuilder().setName('equip').setDescription('Equip an item or charm from your inventory.')
+        .addStringOption(o => o.setName('item').setDescription('Item or charm name to equip').setRequired(true)),
+    new SlashCommandBuilder().setName('meme').setDescription('Generate a random meme from the internet.'),
     new SlashCommandBuilder().setName('market').setDescription('View player market listings or sell items.'),
     new SlashCommandBuilder().setName('sell').setDescription('Sell items or animals on the market.')
         .addStringOption(o => o.setName('type').setDescription('Animal or Item name').setRequired(true))
@@ -646,18 +674,19 @@ const commands = [
     new SlashCommandBuilder().setName('trade').setDescription('Interactive trade offer with another user.')
         .addUserOption(o => o.setName('target').setDescription('Trade partner').setRequired(true)),
     
+    // Validated Admin Commands
     new SlashCommandBuilder().setName('admin-give-coins').setDescription('Admin: Give coins').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
         .addIntegerOption(o => o.setName('amount').setDescription('Amount').setRequired(true)),
     new SlashCommandBuilder().setName('admin-give-item').setDescription('Admin: Give shop item').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
-        .addStringOption(o => o.setName('item').setDescription('Item name').setRequired(true)),
+        .addStringOption(o => o.setName('item').setDescription('Exact item name').setRequired(true)),
     new SlashCommandBuilder().setName('admin-give-animal').setDescription('Admin: Give animal').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
-        .addStringOption(o => o.setName('type').setDescription('Animal name').setRequired(true)),
+        .addStringOption(o => o.setName('type').setDescription('Exact animal name').setRequired(true)),
     new SlashCommandBuilder().setName('admin-give-title').setDescription('Admin: Award title').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
-        .addStringOption(o => o.setName('title').setDescription('Title name').setRequired(true)),
+        .addStringOption(o => o.setName('title').setDescription('Exact title name').setRequired(true)),
     new SlashCommandBuilder().setName('admin-give-lootbox').setDescription('Admin: Give lootboxes').setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addUserOption(o => o.setName('target').setDescription('Target').setRequired(true))
         .addIntegerOption(o => o.setName('amount').setDescription('Quantity').setRequired(true)),
@@ -705,12 +734,12 @@ client.once('ready', async () => {
     console.log('Slash commands synchronized.');
 });
 
+// --- SET BOT STATUS TO [Server Invite] /start ---
 setInterval(() => {
-    const serverCount = client.guilds.cache.size;
-    client.user.setActivity(`with ${serverCount} servers | /hunt`, { type: 0 });
+    client.user.setActivity('[Server Invite] /start', { type: 0 });
 }, 60000);
 
-function checkCooldown(user, commandName, seconds = 2) {
+function checkCooldown(user, commandName, seconds = 3) { // Updated to 3 seconds cooldown
     const now = Date.now();
     if (!user.cooldowns) user.cooldowns = {};
     const expiration = (user.cooldowns[commandName] || 0) + (seconds * 1000);
@@ -729,17 +758,16 @@ client.on('interactionCreate', async interaction => {
             const initiatorId = parts[3];
 
             if (interaction.user.id !== targetId && interaction.user.id !== initiatorId) {
-                return interaction.reply({ content: '❌ You are not part of this trade session.', ephemeral: true });
+                return interaction.reply({ content: '❌ You are not authorized to interact with this trade session.', ephemeral: true });
             }
 
             const embed = new EmbedBuilder()
-                .setTitle('🤝 Interactive Trade Session')
+                .setTitle('Interactive Trade Session')
                 .setColor('#ffaa00')
                 .setDescription(`Trade session active between users.\n\n` +
                     `**User 1 (${initiatorId === interaction.user.id ? interaction.user.username : 'Partner'})**\n` +
-                    `_____________________\n| Click the button to offer items/coins\n|_____________________\n\n` +
-                    `**User 2 (${targetId === interaction.user.id ? interaction.user.username : 'Partner'})**\n` +
-                    `_____________________\n| Click the button to offer items/coins\n|_____________________`);
+                    `| Click the button to confirm or cancel your trade offerings.\n\n` +
+                    `**User 2 (${targetId === interaction.user.id ? interaction.user.username : 'Partner'})**`);
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`trade_accept_${initiatorId}_${targetId}`).setLabel('Confirm Trade').setStyle(ButtonStyle.Success),
@@ -748,10 +776,10 @@ client.on('interactionCreate', async interaction => {
             return interaction.update({ embeds: [embed], components: [row] });
         }
         else if (interaction.customId.startsWith('trade_accept_')) {
-            return interaction.update({ content: '✅ Trade successfully completed and verified!', embeds: [], components: [] });
+            return interaction.update({ content: '✅ Trade successfully completed and verified.', embeds: [], components: [] });
         }
         else if (interaction.customId.startsWith('trade_cancel_')) {
-            return interaction.update({ content: '❌ Trade session cancelled.', embeds: [], components: [] });
+            return interaction.update({ content: '❌ Trade session has been cancelled.', embeds: [], components: [] });
         }
         return;
     }
@@ -762,38 +790,126 @@ client.on('interactionCreate', async interaction => {
     const data = readData();
     const user = getUser(data, interaction.user.id);
 
+    // --- ENFORCE /start REQUIREMENT ---
+    if (commandName === 'start') {
+        user.started = true;
+        if (!user.titles.includes('Beta')) {
+            user.titles.push('Beta');
+        }
+        if (!user.equippedTitle) {
+            user.equippedTitle = 'Beta';
+        }
+        saveData(data);
+
+        // Send Welcome Message via DM
+        try {
+            const dmEmbed = new EmbedBuilder()
+                .setTitle('Welcome to Night (BETA)!')
+                .setColor('#5865F2')
+                .setDescription('Thank you for initializing your profile! You have automatically unlocked the exclusive **Beta** title.\n\n' +
+                    'Here is a list of commands to get you started:\n' +
+                    '• `/hunt` - Hunt animals and boxes\n' +
+                    '• `/shop` - Purchase weapons and charms\n' +
+                    '• `/profiles` - View your RPG profile card\n' +
+                    '• `/help` - View all available bot commands\n\n' +
+                    'Good luck on your adventure!');
+            await interaction.user.send({ embeds: [dmEmbed] });
+        } catch (e) {
+            // DMs might be closed
+        }
+
+        return interaction.reply({ content: '✅ Profile successfully initialized! Check your DMs for a welcome message and command overview.', ephemeral: true });
+    }
+
+    // Check if user has started
+    if (!user.started && commandName !== 'help') {
+        return interaction.reply({ content: '⚠️ Please run the `/start` command first to initialize your profile and begin playing!', ephemeral: true });
+    }
+
     const isAdminCommand = commandName.startsWith('admin-');
     if (isAdminCommand) {
         const isOwner = interaction.user.id === interaction.guild?.ownerId || data.admins.includes(interaction.user.id) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (commandName === 'admin-give-permission') {
             if (interaction.user.id !== interaction.guild?.ownerId) {
-                return interaction.reply({ content: '❌ Only the server owner can execute `/admin-give-permission`.', ephemeral: true });
+                return interaction.reply({ content: '❌ Only the server owner can execute this command.', ephemeral: true });
             }
         } else if (!isOwner) {
-            return interaction.reply({ content: '❌ You do not have permission to use admin commands.', ephemeral: true });
+            return interaction.reply({ content: '❌ You do not have permission to execute admin commands.', ephemeral: true });
         }
     }
 
     try {
-        if (['balance', 'beg', 'work', 'coinflip', 'slot', 'blackjack', 'trivia', 'hunt', 'lootbox', 'open', 'battle'].includes(commandName)) {
-            const cd = checkCooldown(user, commandName, 2);
+        // Universal 3-Second Cooldown Check (Excluding /start and /help)
+        if (commandName !== 'start' && commandName !== 'help') {
+            const cd = checkCooldown(user, commandName, 3);
             if (cd > 0) {
                 return interaction.reply({ content: `⏳ Please wait **${cd}s** before using \`/${commandName}\` again.`, ephemeral: true });
             }
             saveData(data);
         }
 
+        // --- /help ---
+        if (commandName === 'help') {
+            const embed = new EmbedBuilder()
+                .setTitle('Command Directory')
+                .setColor('#5865F2')
+                .setDescription('Here is the complete list of available commands:')
+                .addFields(
+                    { name: '🎮 Getting Started', value: '`/start` - Initialize profile & claim Beta title\n`/help` - View command directory', inline: false },
+                    { name: '🎯 Hunting & Combat', value: '`/hunt` - Go hunting for animals & boxes\n`/team` - Equip animals to your active combat slots\n`/battle` - Battle another player in the arena\n`/animal-stats` - View active team combat statistics', inline: false },
+                    { name: '👤 Profile & Progress', value: '`/profiles` - View your RPG profile card\n`/rank` - Check points and rank tier badge\n`/level` - Check user and animal level/EXP status\n`/collection` - View your animal collection\n`/titles` - View and equip unlocked titles\n`/titlelist` - View all available titles', inline: false },
+                    { name: '🪙 Economy & Shop', value: '`/balance` - Check wallet and bank\n`/shop` - Browse weapons and charms\n`/buy` - Purchase shop items\n`/equip` - Equip an item or charm\n`/beg` / `/work` - Earn starter coins\n`/coinflip` / `/slot` / `/blackjack` / `/trivia` - Play mini-games\n`/market` / `/sell` / `/buy-market` - Community player market\n`/inventory` - Check items and boxes', inline: false },
+                    { name: '🎁 Utilities & Events', value: '`/daily` / `/weekly` - Claim recurring rewards\n`/quest` - View active daily/weekly tasks\n`/event` / `/stats` - Check weather and active boost stats\n`/meme` - Generate a random meme\n`/trade` - Secure player trading', inline: false }
+                );
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        // --- /rank ---
+        else if (commandName === 'rank') {
+            const rankBadge = getRankBadge(user.points || 0);
+            const embed = new EmbedBuilder()
+                .setTitle(`Rank Status — ${interaction.user.username}`)
+                .setColor('#0099ff')
+                .setDescription(`You currently hold **${user.points || 0} points**.\nYour Active Rank Badge: ${rankBadge}`);
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        // --- /meme ---
+        else if (commandName === 'meme') {
+            try {
+                const memeData = await fetchMeme();
+                const embed = new EmbedBuilder()
+                    .setTitle(memeData.title)
+                    .setImage(memeData.url)
+                    .setColor('#ff4500')
+                    .setFooter({ text: `Subreddit: r/${memeData.subreddit} | 👍 ${memeData.ups}` });
+                return interaction.reply({ embeds: [embed] });
+            } catch (err) {
+                return interaction.reply({ content: '❌ Failed to fetch a meme at the moment. Please try again later.', ephemeral: true });
+            }
+        }
+
+        // --- /equip ---
+        else if (commandName === 'equip') {
+            const itemName = interaction.options.getString('item');
+            const foundItem = user.inventory.find(i => i.toLowerCase() === itemName.toLowerCase());
+            if (!foundItem) {
+                return interaction.reply({ content: `❌ You do not own any item named **${itemName}** in your inventory.`, ephemeral: true });
+            }
+            return interaction.reply({ content: `✅ Successfully equipped **${foundItem}** from your inventory.`, ephemeral: true });
+        }
+
         // --- BALANCE ---
-        if (commandName === 'balance') {
+        else if (commandName === 'balance') {
             const target = interaction.options.getUser('user') || interaction.user;
             const tData = getUser(data, target.id);
             const titleDisplay = tData.equippedTitle ? ` [${tData.equippedTitle}]` : '';
             const embed = new EmbedBuilder()
                 .setColor('#0099ff')
-                .setTitle(`💰 Balance for ${target.username}${titleDisplay}`)
+                .setTitle(`Balance — ${target.username}${titleDisplay}`)
                 .addFields(
-                    { name: '🪙 Wallet', value: `${formatCurrency(tData.wallet)}`, inline: true },
-                    { name: '🏦 Bank', value: `${formatCurrency(tData.bank)}`, inline: true }
+                    { name: 'Wallet', value: `${formatCurrency(tData.wallet)} coins`, inline: true },
+                    { name: 'Bank', value: `${formatCurrency(tData.bank)} coins`, inline: true }
                 );
             return interaction.reply({ embeds: [embed] });
         }
@@ -804,12 +920,12 @@ client.on('interactionCreate', async interaction => {
             user.wallet += amt;
             if (amt >= 8000 && !user.titles.includes('Lucky Charm')) {
                 user.titles.push('Lucky Charm');
-                await interaction.channel.send(`🎉 Congrats **${interaction.user.username}** 🎉 You Unlock **Lucky Charm** by Crazy Beggar`);
+                await interaction.channel.send(`🎉 Congrats **${interaction.user.username}** 🎉 You Unlocked **Lucky Charm** title!`);
             }
             trackQuestProgress(user, 'beg', 1);
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
-            return interaction.reply(`🤲 You begged and received **${formatCurrency(amt)} coins**!`);
+            return interaction.reply(`You begged on the streets and received **${formatCurrency(amt)} coins**.`);
         }
 
         // --- WORK ---
@@ -819,22 +935,22 @@ client.on('interactionCreate', async interaction => {
             trackQuestProgress(user, 'work', 1);
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
-            return interaction.reply(`💼 You worked a hard shift and earned **${formatCurrency(amt)} coins**!`);
+            return interaction.reply(`You completed your shift and earned **${formatCurrency(amt)} coins**.`);
         }
 
         // --- COINFLIP ---
         else if (commandName === 'coinflip') {
             const choice = interaction.options.getString('choice');
             const amount = interaction.options.getInteger('amount');
-            if (amount <= 0 || user.wallet < amount) return interaction.reply({ content: '❌ Invalid bet or insufficient wallet funds.', ephemeral: true });
+            if (amount <= 0 || user.wallet < amount) return interaction.reply({ content: '❌ Invalid bet amount or insufficient wallet balance.', ephemeral: true });
 
             const outcome = Math.random() < 0.53 ? (choice === 'heads' ? 'tails' : 'heads') : choice;
             if (choice === outcome) {
                 user.wallet += amount;
-                await interaction.reply(`🪙 It landed on **${outcome}**! You won **${formatCurrency(amount)} coins**!`);
+                await interaction.reply(`The coin landed on **${outcome}**. You won **${formatCurrency(amount)} coins**.`);
             } else {
                 user.wallet -= amount;
-                await interaction.reply(`🪙 It landed on **${outcome}**! You lost **${formatCurrency(amount)} coins**.`);
+                await interaction.reply(`The coin landed on **${outcome}**. You lost **${formatCurrency(amount)} coins**.`);
             }
             trackQuestProgress(user, 'coinflip', 1);
             saveData(data);
@@ -844,7 +960,7 @@ client.on('interactionCreate', async interaction => {
         // --- SLOT ---
         else if (commandName === 'slot') {
             const amount = interaction.options.getInteger('amount');
-            if (amount <= 0 || user.wallet < amount) return interaction.reply({ content: '❌ Invalid bet or insufficient wallet funds.', ephemeral: true });
+            if (amount <= 0 || user.wallet < amount) return interaction.reply({ content: '❌ Invalid bet amount or insufficient wallet balance.', ephemeral: true });
 
             const symbols = ['💎', '♥️', '🗡️', '🍎', '🍑', '🥭'];
             const r1 = symbols[Math.floor(Math.random() * symbols.length)];
@@ -856,20 +972,20 @@ client.on('interactionCreate', async interaction => {
                 user.wallet += winnings;
                 if (!user.titles.includes('JACKPOT')) {
                     user.titles.push('JACKPOT');
-                    await interaction.channel.send(`🎉 Congrats **${interaction.user.username}** 🎉 You Unlock **JACKPOT** by No Idea What i've donee`);
+                    await interaction.channel.send(`🎉 Congrats **${interaction.user.username}** 🎉 You Unlocked **JACKPOT** title!`);
                 }
-                await interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] DIAMOND JACKPOT!! You won **${formatCurrency(winnings)} coins**!`);
+                await interaction.reply(`[ ${r1} | ${r2} | ${r3} ] DIAMOND JACKPOT! You won **${formatCurrency(winnings)} coins**.`);
             } else if (r1 === r2 && r2 === r3) {
                 const winnings = amount * 5;
                 user.wallet += winnings;
-                await interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] Triple match! You won **${formatCurrency(winnings)} coins**!`);
+                await interaction.reply(`[ ${r1} | ${r2} | ${r3} ] Triple match! You won **${formatCurrency(winnings)} coins**.`);
             } else if (r1 === r2 || r2 === r3 || r1 === r3) {
                 const winnings = Math.floor(amount * 1.2);
                 user.wallet += winnings;
-                await interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] Two matching! You won **${formatCurrency(winnings)} coins**.`);
+                await interaction.reply(`[ ${r1} | ${r2} | ${r3} ] Partial match. You won **${formatCurrency(winnings)} coins**.`);
             } else {
                 user.wallet -= amount;
-                await interaction.reply(`🎰 [ ${r1} | ${r2} | ${r3} ] No match. You lost **${formatCurrency(amount)} coins**.`);
+                await interaction.reply(`[ ${r1} | ${r2} | ${r3} ] No match. You lost **${formatCurrency(amount)} coins**.`);
             }
             trackQuestProgress(user, 'slot', 1);
             saveData(data);
@@ -879,19 +995,19 @@ client.on('interactionCreate', async interaction => {
         // --- BLACKJACK ---
         else if (commandName === 'blackjack') {
             const amount = interaction.options.getInteger('amount');
-            if (amount <= 0 || user.wallet < amount) return interaction.reply({ content: '❌ Invalid bet or insufficient wallet funds.', ephemeral: true });
+            if (amount <= 0 || user.wallet < amount) return interaction.reply({ content: '❌ Invalid bet amount or insufficient wallet balance.', ephemeral: true });
 
             const playerSum = Math.floor(Math.random() * 8) + 12; 
             const dealerSum = Math.floor(Math.random() * 5) + 17; 
 
             if (playerSum > 21 || (playerSum < dealerSum && dealerSum <= 21)) {
                 user.wallet -= amount;
-                await interaction.reply(`🃏 Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You lost **${formatCurrency(amount)} coins**.`);
+                await interaction.reply(`Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You lost **${formatCurrency(amount)} coins**.`);
             } else if (playerSum === dealerSum) {
-                await interaction.reply(`🃏 Blackjack: Push! Both had ${playerSum}. Bet returned.`);
+                await interaction.reply(`Blackjack: Push! Both had ${playerSum}. Bet returned.`);
             } else {
                 user.wallet += amount;
-                await interaction.reply(`🃏 Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You won **${formatCurrency(amount)} coins**!`);
+                await interaction.reply(`Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You won **${formatCurrency(amount)} coins**.`);
             }
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
@@ -903,24 +1019,24 @@ client.on('interactionCreate', async interaction => {
             user.wallet += reward;
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
-            return interaction.reply(`🧠 Hard Trivia Solved! You answered correctly and earned **${formatCurrency(reward)} coins**!`);
+            return interaction.reply(`Trivia solved successfully! You earned **${formatCurrency(reward)} coins**.`);
         }
 
         // --- SHOP ---
         else if (commandName === 'shop') {
             const category = interaction.options.getString('category');
-            const embed = new EmbedBuilder().setTitle('🛒 Shop & Weapon Armory').setColor('#00ffcc');
+            const embed = new EmbedBuilder().setTitle('Shop & Armory').setColor('#00ffcc');
 
             const itemsToShow = category ? data.shopItems.filter(i => i.category === category) : data.shopItems;
 
-            const gunList = itemsToShow.filter(i => i.category === 'Gun').map(i => `**[ID: ${i.id}] ${i.name}** - 🪙 ${formatCurrency(i.price)}\n└ *${i.description}*`).join('\n\n');
-            const charmList = itemsToShow.filter(i => i.category === 'Charm').map(i => `**[ID: ${i.id}] ${i.name}** - 🪙 ${formatCurrency(i.price)}\n└ *${i.description}* (Non-stackable)`).join('\n\n');
+            const gunList = itemsToShow.filter(i => i.category === 'Gun').map(i => `**[ID: ${i.id}] ${i.name}** - ${formatCurrency(i.price)} coins\n└ *${i.description}*`).join('\n\n');
+            const charmList = itemsToShow.filter(i => i.category === 'Charm').map(i => `**[ID: ${i.id}] ${i.name}** - ${formatCurrency(i.price)} coins\n└ *${i.description}* (Non-stackable)`).join('\n\n');
 
             if (!category || category === 'Gun') {
-                embed.addFields({ name: '🔫 Gun Category', value: gunList || 'No guns available.' });
+                embed.addFields({ name: 'Gun Category', value: gunList || 'No guns available.' });
             }
             if (!category || category === 'Charm') {
-                embed.addFields({ name: '✨ Charm Category (Non-stacking)', value: charmList || 'No charms available.' });
+                embed.addFields({ name: 'Charm Category', value: charmList || 'No charms available.' });
             }
 
             return interaction.reply({ embeds: [embed] });
@@ -933,24 +1049,24 @@ client.on('interactionCreate', async interaction => {
             if (!item) return interaction.reply({ content: '❌ Item not found in shop.', ephemeral: true });
 
             if (item.category === 'Charm' && user.inventory.includes(item.name)) {
-                return interaction.reply({ content: `❌ You already own **${item.name}**! Charms cannot be stacked.`, ephemeral: true });
+                return interaction.reply({ content: `❌ You already own **${item.name}**. Charms cannot be stacked.`, ephemeral: true });
             }
 
-            if (user.wallet < item.price) return interaction.reply({ content: '❌ Not enough wallet coins.', ephemeral: true });
+            if (user.wallet < item.price) return interaction.reply({ content: '❌ Insufficient wallet balance.', ephemeral: true });
 
             user.wallet -= item.price;
             user.inventory.push(item.name);
             saveData(data);
-            return interaction.reply(`✅ Successfully purchased **${item.name}** for 🪙 ${formatCurrency(item.price)}!`);
+            return interaction.reply(`Successfully purchased **${item.name}** for ${formatCurrency(item.price)} coins.`);
         }
 
-        // --- MARKET SELL & BUY ---
+        // --- MARKET ---
         else if (commandName === 'sell') {
             const typeName = interaction.options.getString('type');
             const qty = interaction.options.getInteger('quantity');
             const amount = interaction.options.getInteger('amount');
 
-            if (qty <= 0 || amount <= 0) return interaction.reply({ content: '❌ Quantity and amount must be greater than zero.', ephemeral: true });
+            if (qty <= 0 || amount <= 0) return interaction.reply({ content: '❌ Quantity and price must be greater than zero.', ephemeral: true });
 
             let isAnimal = HUNT_ANIMALS.some(a => a.name.toLowerCase() === typeName.toLowerCase());
             let isItem = user.inventory.includes(typeName);
@@ -992,19 +1108,19 @@ client.on('interactionCreate', async interaction => {
                     price: amount
                 });
             } else {
-                return interaction.reply({ content: `❌ You don't own any item or animal named **${typeName}** to sell.`, ephemeral: true });
+                return interaction.reply({ content: `❌ You do not own any item or animal named **${typeName}** to sell.`, ephemeral: true });
             }
 
             saveData(data);
-            return interaction.reply(`🛍️ Successfully listed **${qty}x ${typeName}** on the market for 🪙 ${formatCurrency(amount)} coins! (Listing ID: ${data.marketListings.length})`);
+            return interaction.reply(`Listed **${qty}x ${typeName}** on the community market for ${formatCurrency(amount)} coins. (Listing ID: ${data.marketListings.length})`);
         }
 
         else if (commandName === 'market') {
-            const embed = new EmbedBuilder().setTitle('🏪 Player Community Market').setColor('#00ffcc');
+            const embed = new EmbedBuilder().setTitle('Community Player Market').setColor('#00ffcc');
             if (data.marketListings.length === 0) {
-                embed.setDescription('No active listings on the market. Use `/sell` to post items or animals.');
+                embed.setDescription('No active listings available on the market.');
             } else {
-                const list = data.marketListings.map(l => `**[ID: ${l.id}]** ${l.quantity}x **${l.name}** (${l.type}) by **${l.sellerName}** — 🪙 **${formatCurrency(l.price)} coins**`).join('\n');
+                const list = data.marketListings.map(l => `**[ID: ${l.id}]** ${l.quantity}x **${l.name}** (${l.type}) by **${l.sellerName}** — **${formatCurrency(l.price)} coins**`).join('\n');
                 embed.setDescription(list);
             }
             return interaction.reply({ embeds: [embed] });
@@ -1014,8 +1130,8 @@ client.on('interactionCreate', async interaction => {
             const id = interaction.options.getInteger('id');
             const listing = data.marketListings.find(l => l.id === id);
             if (!listing) return interaction.reply({ content: '❌ Market listing not found.', ephemeral: true });
-            if (listing.sellerId === interaction.user.id) return interaction.reply({ content: '❌ You cannot buy your own listing.', ephemeral: true });
-            if (user.wallet < listing.price) return interaction.reply({ content: '❌ Not enough wallet coins to buy this listing.', ephemeral: true });
+            if (listing.sellerId === interaction.user.id) return interaction.reply({ content: '❌ You cannot purchase your own listing.', ephemeral: true });
+            if (user.wallet < listing.price) return interaction.reply({ content: '❌ Insufficient wallet balance to purchase this listing.', ephemeral: true });
 
             user.wallet -= listing.price;
             const sellerUser = getUser(data, listing.sellerId);
@@ -1033,7 +1149,7 @@ client.on('interactionCreate', async interaction => {
             data.marketListings = data.marketListings.filter(l => l.id !== id);
             saveData(data);
 
-            return interaction.reply(`✅ Successfully purchased ${listing.quantity}x **${listing.name}** from **${listing.sellerName}** for 🪙 ${formatCurrency(listing.price)} coins!`);
+            return interaction.reply(`Successfully purchased ${listing.quantity}x **${listing.name}** from **${listing.sellerName}** for ${formatCurrency(listing.price)} coins.`);
         }
 
         // --- TEAM EQUIPPING (/team) ---
@@ -1045,26 +1161,26 @@ client.on('interactionCreate', async interaction => {
             if (!foundAnimal) return interaction.reply({ content: '❌ Invalid animal name specified.', ephemeral: true });
 
             if ((user.collection[foundAnimal.name] || 0) <= 0) {
-                return interaction.reply({ content: `❌ You do not own **${foundAnimal.name}** in your collection!`, ephemeral: true });
+                return interaction.reply({ content: `❌ You do not own **${foundAnimal.name}** in your collection.`, ephemeral: true });
             }
 
             user.team[slot] = foundAnimal.name;
             saveData(data);
 
-            return interaction.reply(`✅ Successfully equipped **${foundAnimal.badge} ${foundAnimal.name}** into Team Slot **${slot + 1}**!`);
+            return interaction.reply(`Successfully equipped **${foundAnimal.badge} ${foundAnimal.name}** into Team Slot **${slot + 1}**.`);
         }
 
-        // --- LEVEL & EXP WITH DYNAMIC SCALING (/level) ---
+        // --- LEVEL & EXP (/level) ---
         else if (commandName === 'level') {
             const target = interaction.options.getUser('user') || interaction.user;
             const tData = getUser(data, target.id);
 
             const userNeededExp = getUserMaxExp(tData.level);
             const embed = new EmbedBuilder()
-                .setTitle(`📊 ${target.username}'s Level & EXP Status`)
+                .setTitle(`Level & EXP Status — ${target.username}`)
                 .setColor('#00ffcc')
                 .addFields(
-                    { name: '👤 User Level', value: `Level **${tData.level}** (${tData.exp.toLocaleString()}/${userNeededExp.toLocaleString()} EXP)`, inline: false }
+                    { name: 'User Level', value: `Level **${tData.level}** (${tData.exp.toLocaleString()}/${userNeededExp.toLocaleString()} EXP)`, inline: false }
                 );
 
             const teamLines = [];
@@ -1080,7 +1196,7 @@ client.on('interactionCreate', async interaction => {
                 }
             }
 
-            embed.addFields({ name: '🐾 Active Team Animal Levels', value: teamLines.join('\n'), inline: false });
+            embed.addFields({ name: 'Active Team Animal Levels', value: teamLines.join('\n'), inline: false });
             return interaction.reply({ embeds: [embed] });
         }
 
@@ -1090,7 +1206,7 @@ client.on('interactionCreate', async interaction => {
             const tData = getUser(data, target.id);
 
             const embed = new EmbedBuilder()
-                .setTitle(`🛡️ ${target.username}'s Team Animal Combat Stats`)
+                .setTitle(`Team Combat Stats — ${target.username}`)
                 .setColor('#9900ff');
 
             let hasTeam = false;
@@ -1108,7 +1224,7 @@ client.on('interactionCreate', async interaction => {
             }
 
             if (!hasTeam) {
-                embed.setDescription('No animals equipped in team slots! Use `/team` to equip animals.');
+                embed.setDescription('No animals equipped in team slots. Use `/team` to assign pets.');
             } else {
                 embed.setDescription(statLines.join('\n\n'));
             }
@@ -1151,7 +1267,7 @@ client.on('interactionCreate', async interaction => {
             const isWin = roll1 >= roll2;
 
             const embed = new EmbedBuilder()
-                .setTitle('⚔️ Pet Arena Battle')
+                .setTitle('Pet Arena Battle')
                 .setColor(isWin ? '#00ff88' : '#ff3333');
 
             if (isWin) {
@@ -1160,8 +1276,8 @@ client.on('interactionCreate', async interaction => {
                 for (const pName of challenger.team) {
                     if (pName) addAnimalExp(challenger, pName, 650);
                 }
-                embed.setDescription(`🎉 **${interaction.user.username}** defeated **${target.username}** in an intense battle!\n\n` +
-                    `🏆 **Rewards & Points:**\n` +
+                embed.setDescription(`**${interaction.user.username}** defeated **${target.username}** in battle.\n\n` +
+                    `Rewards:\n` +
                     `• +20 Points\n` +
                     `• +650 User & Team EXP`);
             } else {
@@ -1172,8 +1288,8 @@ client.on('interactionCreate', async interaction => {
                 for (const pName of challenger.team) {
                     if (pName) addAnimalExp(challenger, pName, 300);
                 }
-                embed.setDescription(`💀 **${target.username}** successfully defended against **${interaction.user.username}**!\n\n` +
-                    `⚠️ **Battle Result:**\n` +
+                embed.setDescription(`**${target.username}** successfully defended against **${interaction.user.username}**.\n\n` +
+                    `Results:\n` +
                     `• -10 Points (Protected at 0)\n` +
                     `• +300 User & Team EXP (Consolation)`);
             }
@@ -1200,16 +1316,16 @@ client.on('interactionCreate', async interaction => {
             if (category === 'money') {
                 allUsers.sort((a, b) => b.money - a.money);
                 const top10 = allUsers.slice(0, 10);
-                embed.setTitle('🏆 Leaderboard — Top 10 Total Money');
+                embed.setTitle('Leaderboard — Top 10 Total Money');
                 const lines = top10.map((u, index) => {
                     const rankIcon = getRankBadge(u.points);
-                    return `**#${index+1}** <@${u.userId}> — 🪙 **${formatCurrency(u.money)}** ${rankIcon}`;
+                    return `**#${index+1}** <@${u.userId}> — **${formatCurrency(u.money)} coins** ${rankIcon}`;
                 });
                 embed.setDescription(lines.join('\n') || 'No players on leaderboard yet.');
             } else if (category === 'points') {
                 allUsers.sort((a, b) => b.points - a.points);
                 const top10 = allUsers.slice(0, 10);
-                embed.setTitle('🏆 Leaderboard — Top 10 Total Points');
+                embed.setTitle('Leaderboard — Top 10 Total Points');
                 const lines = top10.map((u, index) => {
                     const rankIcon = getRankBadge(u.points);
                     return `**#${index+1}** <@${u.userId}> — **${u.points} pts** ${rankIcon}`;
@@ -1218,10 +1334,10 @@ client.on('interactionCreate', async interaction => {
             } else if (category === 'hunts') {
                 allUsers.sort((a, b) => b.hunts - a.hunts);
                 const top10 = allUsers.slice(0, 10);
-                embed.setTitle('🏆 Leaderboard — Top 10 Total Hunts');
+                embed.setTitle('Leaderboard — Top 10 Total Hunts');
                 const lines = top10.map((u, index) => {
                     const rankIcon = getRankBadge(u.points);
-                    return `**#${index+1}** <@${u.userId}> — 🎯 **${u.hunts.toLocaleString()} hunts** ${rankIcon}`;
+                    return `**#${index+1}** <@${u.userId}> — **${u.hunts.toLocaleString()} hunts** ${rankIcon}`;
                 });
                 embed.setDescription(lines.join('\n') || 'No players on leaderboard yet.');
             }
@@ -1235,7 +1351,7 @@ client.on('interactionCreate', async interaction => {
             const huntCount = boosts.huntCount;
 
             const embed = new EmbedBuilder()
-                .setTitle('🎯 Hunting Expedition')
+                .setTitle('Hunting Expedition')
                 .setColor('#00ff88');
 
             const caughtSummary = [];
@@ -1284,13 +1400,13 @@ client.on('interactionCreate', async interaction => {
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
 
-            embed.setDescription(`You fired your weapon and completed **${huntCount} hunts**!\n\n**Animals Caught:**\n${caughtSummary.slice(0, 20).join('\n')}${caughtSummary.length > 20 ? `\n*(And ${caughtSummary.length - 20} more)*` : ''}`);
-            embed.addFields({ name: '📈 EXP Gained', value: `+${totalExpGained} User & Team EXP` });
+            embed.setDescription(`Completed **${huntCount} hunts**.\n\nAnimals Discovered:\n${caughtSummary.slice(0, 20).join('\n')}${caughtSummary.length > 20 ? `\n*(And ${caughtSummary.length - 20} more)*` : ''}`);
+            embed.addFields({ name: 'EXP Gained', value: `+${totalExpGained} User & Team EXP` });
             if (totalBoxesFound > 0) {
-                embed.addFields({ name: '🎁 Boxes Found', value: `Found **${totalBoxesFound}** mystery boxes during the hunt!` });
+                embed.addFields({ name: 'Boxes Found', value: `Discovered **${totalBoxesFound}** mystery boxes during the expedition.` });
             }
             if (questAlerts.length > 0) {
-                embed.addFields({ name: '🎉 Quest Completed!', value: questAlerts.join('\n') });
+                embed.addFields({ name: 'Quest Completed', value: questAlerts.join('\n') });
             }
 
             return interaction.reply({ embeds: [embed] });
@@ -1301,7 +1417,7 @@ client.on('interactionCreate', async interaction => {
             const qty = interaction.options.getInteger('quantity') || 1;
             if (qty <= 0) return interaction.reply({ content: '❌ Quantity must be at least 1.', ephemeral: true });
             if ((user.lootboxes || 0) < qty) {
-                return interaction.reply({ content: `❌ You only have **${user.lootboxes || 0}x** Lootboxes available! (${LOOTBOX_ICON})`, ephemeral: true });
+                return interaction.reply({ content: `❌ You only have **${user.lootboxes || 0}x** Lootboxes available.`, ephemeral: true });
             }
 
             user.lootboxes -= qty;
@@ -1321,7 +1437,7 @@ client.on('interactionCreate', async interaction => {
                 } else if (Math.random() < 0.5) {
                     const coinAmt = Math.floor(Math.random() * 5000) + 1;
                     user.wallet += coinAmt;
-                    rewardsSummary.push(`🪙 ${formatCurrency(coinAmt)} coins`);
+                    rewardsSummary.push(`${formatCurrency(coinAmt)} coins`);
                 } else {
                     const standardAnimals = HUNT_ANIMALS.filter(a => a.tier !== 'Shiny');
                     const randAnimal = pickWeightedAnimal(standardAnimals, boosts.totalLuckMultiplier, boosts.flatCatchBonus);
@@ -1338,12 +1454,12 @@ client.on('interactionCreate', async interaction => {
             await checkAndAwardTitles(user, interaction.user, interaction);
 
             const embed = new EmbedBuilder()
-                .setTitle(`${LOOTBOX_ICON} Opened ${qty}x Lootboxes!`)
+                .setTitle(`Opened ${qty}x Lootboxes`)
                 .setDescription(rewardsSummary.slice(0, 15).join('\n') + (rewardsSummary.length > 15 ? `\n*(And ${rewardsSummary.length - 15} more rewards)*` : ''))
                 .setColor('#ffaa00');
 
             if (questAlerts.length > 0) {
-                embed.addFields({ name: '🎉 Quest Completed!', value: questAlerts.join('\n') });
+                embed.addFields({ name: 'Quest Completed', value: questAlerts.join('\n') });
             }
 
             return interaction.reply({ embeds: [embed] });
@@ -1356,7 +1472,7 @@ client.on('interactionCreate', async interaction => {
             if (qty <= 0) return interaction.reply({ content: '❌ Quantity must be at least 1.', ephemeral: true });
 
             if (!user.boxes[boxRarity] || user.boxes[boxRarity] < qty) {
-                return interaction.reply({ content: `❌ You only have **${user.boxes[boxRarity] || 0}x** **${boxRarity} Boxes** available!`, ephemeral: true });
+                return interaction.reply({ content: `❌ You only have **${user.boxes[boxRarity] || 0}x** **${boxRarity} Boxes** available.`, ephemeral: true });
             }
 
             user.boxes[boxRarity] -= qty;
@@ -1376,7 +1492,7 @@ client.on('interactionCreate', async interaction => {
                 if (Math.random() < 0.5) {
                     const coinDrop = Math.floor(Math.random() * maxCoins) + 1;
                     user.wallet += coinDrop;
-                    rewardsSummary.push(`🪙 ${formatCurrency(coinDrop)} coins`);
+                    rewardsSummary.push(`${formatCurrency(coinDrop)} coins`);
                 } else {
                     const effectiveShinyChance = (baseShinyChance * boosts.totalLuckMultiplier) + (boosts.flatCatchBonus * 0.01);
                     if (Math.random() < effectiveShinyChance) {
@@ -1402,12 +1518,12 @@ client.on('interactionCreate', async interaction => {
             await checkAndAwardTitles(user, interaction.user, interaction);
 
             const embed = new EmbedBuilder()
-                .setTitle(`${BOX_ICONS[boxRarity]} Opened ${qty}x ${boxRarity} Boxes!`)
+                .setTitle(`Opened ${qty}x ${boxRarity} Boxes`)
                 .setDescription(rewardsSummary.slice(0, 15).join('\n') + (rewardsSummary.length > 15 ? `\n*(And ${rewardsSummary.length - 15} more drops)*` : ''))
                 .setColor('#9900ff');
 
             if (questAlerts.length > 0) {
-                embed.addFields({ name: '🎉 Quest Completed!', value: questAlerts.join('\n') });
+                embed.addFields({ name: 'Quest Completed', value: questAlerts.join('\n') });
             }
 
             return interaction.reply({ embeds: [embed] });
@@ -1419,7 +1535,7 @@ client.on('interactionCreate', async interaction => {
             const twelveHours = 12 * 60 * 60 * 1000;
             if (now - user.lastDailyTimestamp < twelveHours) {
                 const hoursLeft = Math.ceil((twelveHours - (now - user.lastDailyTimestamp)) / (1000 * 60 * 60));
-                return interaction.reply({ content: `⏳ Daily reward already claimed! Come back in **${hoursLeft} hours**.`, ephemeral: true });
+                return interaction.reply({ content: `⏳ Daily reward already claimed. Available in **${hoursLeft} hours**.`, ephemeral: true });
             }
 
             user.lastDailyTimestamp = now;
@@ -1431,14 +1547,14 @@ client.on('interactionCreate', async interaction => {
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
 
-            return interaction.reply(`🎁 Daily Claimed! Streak: 🔥 **${user.dailyStreak} Days**. Received 1x ${LOOTBOX_ICON} Lootbox and 1x ${BOX_ICONS['Rare']} Rare Box!`);
+            return interaction.reply(`Daily claimed successfully. Streak: **${user.dailyStreak} Days**. Received 1x Lootbox and 1x Rare Box.`);
         }
 
         else if (commandName === 'weekly') {
             const now = Date.now();
             const fiveDays = 5 * 24 * 60 * 60 * 1000;
             if (now - (user.lastWeeklyTimestamp || 0) < fiveDays) {
-                return interaction.reply({ content: `⏳ Weekly reward already claimed!`, ephemeral: true });
+                return interaction.reply({ content: `⏳ Weekly reward already claimed.`, ephemeral: true });
             }
 
             user.lastWeeklyTimestamp = now;
@@ -1450,7 +1566,7 @@ client.on('interactionCreate', async interaction => {
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
 
-            return interaction.reply(`🎁 Weekly Claimed! Received 3x ${LOOTBOX_ICON} Lootboxes, 1x ${BOX_ICONS['Epic']} Epic Box, and 1x ${BOX_ICONS['Legendary']} Legendary Box!`);
+            return interaction.reply(`Weekly claimed successfully. Received 3x Lootboxes, 1x Epic Box, and 1x Legendary Box.`);
         }
 
         // --- QUEST ---
@@ -1477,11 +1593,11 @@ client.on('interactionCreate', async interaction => {
             const weeklyDaysLeft = ((user.quests.weeklyReset - now) / (1000 * 60 * 60 * 24)).toFixed(1);
 
             const embed = new EmbedBuilder()
-                .setTitle('📋 Quests & Automatic Rewards')
+                .setTitle('Active Quests')
                 .setColor('#00ffcc')
                 .addFields(
-                    { name: `📅 Daily Quests (Resets in ${Math.floor(dailyTimeLeft / 60)}h ${dailyTimeLeft % 60}m) [${user.quests.dailyCompleted ? 'COMPLETED ✅' : 'IN PROGRESS'}]`, value: user.quests.daily.map(q => `• ${q} (${user.quests.dailyProgress[q] || 0})`).join('\n') },
-                    { name: `🗓️ Weekly Quests (Resets in ${weeklyDaysLeft} days) [${user.quests.weeklyCompleted ? 'COMPLETED ✅' : 'IN PROGRESS'}]`, value: user.quests.weekly.map(q => `• ${q} (${user.quests.weeklyProgress[q] || 0})`).join('\n') }
+                    { name: `Daily Quests (Resets in ${Math.floor(dailyTimeLeft / 60)}h ${dailyTimeLeft % 60}m) [${user.quests.dailyCompleted ? 'COMPLETED' : 'IN PROGRESS'}]`, value: user.quests.daily.map(q => `• ${q} (${user.quests.dailyProgress[q] || 0})`).join('\n') },
+                    { name: `Weekly Quests (Resets in ${weeklyDaysLeft} days) [${user.quests.weeklyCompleted ? 'COMPLETED' : 'IN PROGRESS'}]`, value: user.quests.weekly.map(q => `• ${q} (${user.quests.weeklyProgress[q] || 0})`).join('\n') }
                 );
 
             return interaction.reply({ embeds: [embed] });
@@ -1492,11 +1608,11 @@ client.on('interactionCreate', async interaction => {
             updateWeatherIfNeeded(data);
             const w = data.currentWeather;
             const embed = new EmbedBuilder()
-                .setTitle('⛅ Current Active Weather & Events')
+                .setTitle('Weather & Global Events')
                 .setColor('#ffaa00')
                 .addFields(
-                    { name: '🌤️ Active Weather', value: `**${w.name}**\n└ Catch Rate: +${w.catchRate}% | Luck Boost: +${Math.round(w.luckBoost * 100)}%` },
-                    { name: '⏳ Next Weather Shift', value: `Rotates every 1 hour (Resets in ${Math.ceil((w.expiresAt - Date.now()) / 60000)} mins)` }
+                    { name: 'Active Weather', value: `**${w.name}**\n└ Catch Rate: +${w.catchRate}% | Luck Boost: +${Math.round(w.luckBoost * 100)}%` },
+                    { name: 'Next Weather Shift', value: `Rotates every 1 hour (Resets in ${Math.ceil((w.expiresAt - Date.now()) / 60000)} mins)` }
                 );
             return interaction.reply({ embeds: [embed] });
         }
@@ -1505,12 +1621,12 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'stats') {
             const boosts = getActiveBoosts(data, user);
             const embed = new EmbedBuilder()
-                .setTitle(`📊 ${interaction.user.username}'s Boost Statistics`)
+                .setTitle(`Boost Statistics — ${interaction.user.username}`)
                 .setColor('#0099ff')
                 .addFields(
-                    { name: '🍀 [luck]', value: `**+${Math.round(boosts.totalLuckBoost * 100)}%** total luck boost (Gun: +${Math.round(boosts.gunLuck*100)}%, Charm: +${Math.round(boosts.charmLuck*100)}%, Weather: +${Math.round(boosts.weatherLuck*100)}%, Event: +${Math.round(boosts.eventLuck*100)}%)`, inline: false },
-                    { name: '🎯 [boost rate]', value: `**+${boosts.totalCatchRateBoost}%** catch rate boost (Weather: +${boosts.weatherCatch}%, Event: +${boosts.eventCatch}%)`, inline: false },
-                    { name: '🔫 Weapon Hunt Power', value: `Hunts **${boosts.huntCount}** animals per \`/hunt\` command`, inline: false }
+                    { name: 'Total Luck Boost', value: `**+${Math.round(boosts.totalLuckBoost * 100)}%**`, inline: false },
+                    { name: 'Catch Rate Boost', value: `**+${boosts.totalCatchRateBoost}%**`, inline: false },
+                    { name: 'Weapon Hunt Power', value: `Hunts **${boosts.huntCount}** animals per \`/hunt\``, inline: false }
                 );
             return interaction.reply({ embeds: [embed] });
         }
@@ -1523,7 +1639,7 @@ client.on('interactionCreate', async interaction => {
 
         // --- INVENTORY ---
         else if (commandName === 'inventory') {
-            const embed = new EmbedBuilder().setTitle(`🎒 ${interaction.user.username}'s Inventory & Boxes`).setColor('#ffaa00');
+            const embed = new EmbedBuilder().setTitle(`Inventory & Storage — ${interaction.user.username}`).setColor('#ffaa00');
             
             const boxCounts = Object.entries(user.boxes).map(([b, count]) => `${BOX_ICONS[b]} **${b} Box**: ${count}x`).join('\n');
             const itemCounts = {};
@@ -1531,8 +1647,8 @@ client.on('interactionCreate', async interaction => {
             const itemList = Object.entries(itemCounts).map(([item, qty]) => `🔹 **${item}**: ${qty}x`).join('\n') || 'No items.';
 
             embed.addFields(
-                { name: '🎁 Lootboxes & Boxes', value: `${LOOTBOX_ICON} **Lootboxes**: ${user.lootboxes || 0}x\n${boxCounts}` },
-                { name: '🎒 Tools & Weapons', value: itemList }
+                { name: 'Boxes', value: `${LOOTBOX_ICON} **Lootboxes**: ${user.lootboxes || 0}x\n${boxCounts}` },
+                { name: 'Tools & Weapons', value: itemList }
             );
 
             return interaction.reply({ embeds: [embed] });
@@ -1544,22 +1660,22 @@ client.on('interactionCreate', async interaction => {
             if (equipName) {
                 const matchedTitle = user.titles.find(t => t.toLowerCase() === equipName.toLowerCase());
                 if (!matchedTitle) {
-                    return interaction.reply({ content: `❌ You have not unlocked the title **${equipName}** yet!`, ephemeral: true });
+                    return interaction.reply({ content: `❌ You have not unlocked the title **${equipName}**.`, ephemeral: true });
                 }
                 user.equippedTitle = matchedTitle;
                 saveData(data);
-                return interaction.reply({ content: `✅ Successfully equipped title: **${matchedTitle}**!`, ephemeral: true });
+                return interaction.reply({ content: `Successfully equipped title: **${matchedTitle}**.`, ephemeral: true });
             }
 
             const embed = new EmbedBuilder()
-                .setTitle(`🏆 ${interaction.user.username}'s Unlocked Titles`)
+                .setTitle(`Unlocked Titles — ${interaction.user.username}`)
                 .setColor('#ffd700');
 
             if (user.titles.length === 0) {
-                embed.addFields({ name: 'Unlocked Titles', value: 'You have not unlocked any titles yet! Check `/titlelist` to see requirements.' });
+                embed.addFields({ name: 'Titles', value: 'No titles unlocked yet. Check `/titlelist` for requirements.' });
             } else {
                 const list = user.titles.map(t => `${t === user.equippedTitle ? '🟢 **[Equipped]**' : '🔹'} **${t}**`).join('\n');
-                embed.addFields({ name: 'Unlocked Titles', value: list });
+                embed.addFields({ name: 'Titles', value: list });
             }
 
             return interaction.reply({ embeds: [embed] });
@@ -1567,7 +1683,7 @@ client.on('interactionCreate', async interaction => {
 
         else if (commandName === 'titlelist') {
             const embed = new EmbedBuilder()
-                .setTitle('📜 All Available Titles List')
+                .setTitle('Available Titles Directory')
                 .setColor('#5865F2');
 
             const categories = { Special: [], Hunting: [], Economy: [] };
@@ -1584,7 +1700,7 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // --- RPG PROFILE REWORK (/profiles) ---
+        // --- RPG PROFILE ---
         else if (commandName === 'profiles') {
             const target = interaction.options.getUser('user') || interaction.user;
             const tData = getUser(data, target.id);
@@ -1597,31 +1713,30 @@ client.on('interactionCreate', async interaction => {
             const embed = new EmbedBuilder()
                 .setColor('#5865F2')
                 .setThumbnail(target.displayAvatarURL({ dynamic: true }))
-                .setTitle(`🛡️ RPG Profile Card • ${target.username}`)
-                .setDescription(`>>> 🏷️ **Title:** ${formatTitleDisplay(tData.equippedTitle)}\n👑 **Rank Badge:** ${rankBadge}`)
+                .setTitle(`RPG Profile Card — ${target.username}`)
+                .setDescription(`Title: ${formatTitleDisplay(tData.equippedTitle)}\nRank Badge: ${rankBadge}`)
                 .addFields(
-                    { name: '📊 Combat & Stats', value: `Level: **${tData.level}**\nPoints: **${tData.points || 0} pts**\nTotal Hunts: **${totalHuntCount.toLocaleString()}**`, inline: true },
-                    { name: '🪙 Economy', value: `Wallet: **🪙 ${formatCurrency(tData.wallet)}**\nBank: **🏦 ${formatCurrency(tData.bank)}**`, inline: true },
-                    { name: '🎖️ Earned Badges', value: badgeDisplay, inline: false }
+                    { name: 'Combat & Stats', value: `Level: **${tData.level}**\nPoints: **${tData.points || 0} pts**\nTotal Hunts: **${totalHuntCount.toLocaleString()}**`, inline: true },
+                    { name: 'Economy', value: `Wallet: **${formatCurrency(tData.wallet)} coins**\nBank: **${formatCurrency(tData.bank)} coins**`, inline: true },
+                    { name: 'Earned Badges', value: badgeDisplay, inline: false }
                 )
                 .setTimestamp();
 
             return interaction.reply({ embeds: [embed] });
         }
 
-        // --- TRADE UI ---
+        // --- TRADE ---
         else if (commandName === 'trade') {
             const target = interaction.options.getUser('target');
-            if (target.id === interaction.user.id) return interaction.reply({ content: '❌ Cannot trade with yourself.', ephemeral: true });
+            if (target.id === interaction.user.id) return interaction.reply({ content: '❌ You cannot trade with yourself.', ephemeral: true });
 
             const embed = new EmbedBuilder()
-                .setTitle('🤝 Secure Interactive Trade')
+                .setTitle('Secure Interactive Trade')
                 .setColor('#ffaa00')
                 .setDescription(`Trade session between **${interaction.user.username}** and **${target.username}**.\n\n` +
                     `**${interaction.user.username}**\n` +
-                    `_____________________\n| Click the button to offer items/coins\n|_____________________\n\n` +
-                    `**${target.username}**\n` +
-                    `_____________________\n| Click the button to offer items/coins\n|_____________________`);
+                    `| Click the button to offer items or coins.\n\n` +
+                    `**${target.username}**`);
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`trade_offer_${target.id}_${interaction.user.id}`).setLabel('Click to Offer').setStyle(ButtonStyle.Primary)
@@ -1630,7 +1745,7 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ embeds: [embed], components: [row] });
         }
 
-        // --- BANK, GIVE ---
+        // --- BANK & GIVE ---
         else if (commandName === 'bank') {
             const action = interaction.options.getString('action');
             const amount = interaction.options.getInteger('amount');
@@ -1638,15 +1753,15 @@ client.on('interactionCreate', async interaction => {
             if (amount <= 0) return interaction.reply({ content: '❌ Enter a valid amount.', ephemeral: true });
 
             if (action === 'deposit') {
-                if (user.wallet < amount) return interaction.reply({ content: '❌ Insufficient wallet funds.', ephemeral: true });
+                if (user.wallet < amount) return interaction.reply({ content: '❌ Insufficient wallet balance.', ephemeral: true });
                 user.wallet -= amount;
                 user.bank += amount;
-                await interaction.reply(`🏦 Deposited **${formatCurrency(amount)} coins** into your bank.`);
+                await interaction.reply(`Deposited **${formatCurrency(amount)} coins** into your bank.`);
             } else {
-                if (user.bank < amount) return interaction.reply({ content: '❌ Insufficient bank funds.', ephemeral: true });
+                if (user.bank < amount) return interaction.reply({ content: '❌ Insufficient bank balance.', ephemeral: true });
                 user.bank -= amount;
                 user.wallet += amount;
-                await interaction.reply(`💵 Withdrew **${formatCurrency(amount)} coins** to your wallet.`);
+                await interaction.reply(`Withdrew **${formatCurrency(amount)} coins** to your wallet.`);
             }
             saveData(data);
         }
@@ -1654,7 +1769,7 @@ client.on('interactionCreate', async interaction => {
         else if (commandName === 'give') {
             const target = interaction.options.getUser('target');
             const amount = interaction.options.getInteger('amount');
-            if (target.id === interaction.user.id) return interaction.reply({ content: '❌ You cannot give coins to yourself.', ephemeral: true });
+            if (target.id === interaction.user.id) return interaction.reply({ content: '❌ You cannot transfer coins to yourself.', ephemeral: true });
             if (amount <= 0 || user.wallet < amount) return interaction.reply({ content: '❌ Insufficient wallet balance.', ephemeral: true });
 
             user.wallet -= amount;
@@ -1662,26 +1777,32 @@ client.on('interactionCreate', async interaction => {
             targetData.wallet += amount;
             saveData(data);
 
-            return interaction.reply(`✅ Successfully transferred **${formatCurrency(amount)} coins** to ${target.username}.`);
+            return interaction.reply(`Successfully transferred **${formatCurrency(amount)} coins** to ${target.username}.`);
         }
 
-        // --- ADMIN COMMANDS ---
+        // --- VALIDATED ADMIN COMMANDS ---
         else if (commandName === 'admin-give-coins') {
             const target = interaction.options.getUser('target');
             const amount = interaction.options.getInteger('amount');
             const targetData = getUser(data, target.id);
             targetData.wallet += amount;
             saveData(data);
-            return interaction.reply({ content: `🛠️ Admin: Added ${formatCurrency(amount)} coins to ${target.tag}.`, ephemeral: true });
+            return interaction.reply({ content: `Admin: Added ${formatCurrency(amount)} coins to ${target.tag}.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-give-item') {
             const target = interaction.options.getUser('target');
             const itemName = interaction.options.getString('item');
+            const validItem = data.shopItems.find(i => i.name.toLowerCase() === itemName.toLowerCase());
+            
+            if (!validItem) {
+                return interaction.reply({ content: `❌ Error: Item **"${itemName}"** does not exist in the shop catalog. Please check the correct name.`, ephemeral: true });
+            }
+
             const targetData = getUser(data, target.id);
-            targetData.inventory.push(itemName);
+            targetData.inventory.push(validItem.name);
             saveData(data);
-            return interaction.reply({ content: `🛠️ Admin: Gave **${itemName}** to ${target.tag}.`, ephemeral: true });
+            return interaction.reply({ content: `Admin: Gave **${validItem.name}** to ${target.tag}.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-give-animal') {
@@ -1689,7 +1810,9 @@ client.on('interactionCreate', async interaction => {
             const animalName = interaction.options.getString('type');
             const foundAnimal = HUNT_ANIMALS.find(a => a.name.toLowerCase() === animalName.toLowerCase());
             
-            if (!foundAnimal) return interaction.reply({ content: '❌ Invalid animal name specified.', ephemeral: true });
+            if (!foundAnimal) {
+                return interaction.reply({ content: `❌ Error: Animal **"${animalName}"** does not exist in the database. Please verify the exact animal name.`, ephemeral: true });
+            }
 
             const targetData = getUser(data, target.id);
             if (!targetData.collection[foundAnimal.name]) targetData.collection[foundAnimal.name] = 0;
@@ -1697,21 +1820,25 @@ client.on('interactionCreate', async interaction => {
 
             saveData(data);
             await checkAndAwardTitles(targetData, target, interaction);
-            return interaction.reply({ content: `🛠️ Admin: Added 1x ${RARITY_ICONS[foundAnimal.tier]} ${foundAnimal.badge} **${foundAnimal.name}** to ${target.tag}'s collection!`, ephemeral: true });
+            return interaction.reply({ content: `Admin: Added 1x ${RARITY_ICONS[foundAnimal.tier]} ${foundAnimal.badge} **${foundAnimal.name}** to ${target.tag}'s collection.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-give-title') {
             const target = interaction.options.getUser('target');
             const titleToGrant = interaction.options.getString('title');
-            const targetData = getUser(data, target.id);
+            
+            if (!TITLES_DATA[titleToGrant]) {
+                return interaction.reply({ content: `❌ Error: Title **"${titleToGrant}"** is invalid or does not exist.`, ephemeral: true });
+            }
 
+            const targetData = getUser(data, target.id);
             if (!targetData.titles.includes(titleToGrant)) {
                 targetData.titles.push(titleToGrant);
             }
             targetData.equippedTitle = titleToGrant;
             saveData(data);
 
-            return interaction.reply({ content: `🏆 Admin: Awarded and equipped title **${titleToGrant}** for ${target.tag}!`, ephemeral: true });
+            return interaction.reply({ content: `Admin: Awarded and equipped title **${titleToGrant}** for ${target.tag}.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-give-lootbox') {
@@ -1720,7 +1847,7 @@ client.on('interactionCreate', async interaction => {
             const targetData = getUser(data, target.id);
             targetData.lootboxes = (targetData.lootboxes || 0) + amt;
             saveData(data);
-            return interaction.reply({ content: `🎁 Admin: Gave **${amt}x** Lootboxes to ${target.tag}!`, ephemeral: true });
+            return interaction.reply({ content: `Admin: Gave **${amt}x** Lootboxes to ${target.tag}.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-give-boxes') {
@@ -1730,7 +1857,7 @@ client.on('interactionCreate', async interaction => {
             const targetData = getUser(data, target.id);
             targetData.boxes[rarity] = (targetData.boxes[rarity] || 0) + amt;
             saveData(data);
-            return interaction.reply({ content: `📦 Admin: Gave **${amt}x ${rarity} Boxes** to ${target.tag}!`, ephemeral: true });
+            return interaction.reply({ content: `Admin: Gave **${amt}x ${rarity} Boxes** to ${target.tag}.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-give-points') {
@@ -1739,7 +1866,7 @@ client.on('interactionCreate', async interaction => {
             const targetData = getUser(data, target.id);
             targetData.points = (targetData.points || 0) + amt;
             saveData(data);
-            return interaction.reply({ content: `🏆 Admin: Added **${amt} points** to ${target.tag}!`, ephemeral: true });
+            return interaction.reply({ content: `Admin: Added **${amt} points** to ${target.tag}.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-give-badge') {
@@ -1748,7 +1875,7 @@ client.on('interactionCreate', async interaction => {
             const targetData = getUser(data, target.id);
             if (!targetData.badges.includes(badgeStr)) targetData.badges.push(badgeStr);
             saveData(data);
-            return interaction.reply({ content: `🎖️ Admin: Granted badge **${badgeStr}** to ${target.tag}!`, ephemeral: true });
+            return interaction.reply({ content: `Admin: Granted badge to ${target.tag}.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-set-level') {
@@ -1758,7 +1885,7 @@ client.on('interactionCreate', async interaction => {
             targetData.level = lvl;
             updateBadgesAndRanks(targetData, target.id, data);
             saveData(data);
-            return interaction.reply({ content: `📊 Admin: Set level to **${lvl}** for ${target.tag}!`, ephemeral: true });
+            return interaction.reply({ content: `Admin: Set level to **${lvl}** for ${target.tag}.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-set-exp') {
@@ -1767,7 +1894,7 @@ client.on('interactionCreate', async interaction => {
             const targetData = getUser(data, target.id);
             targetData.exp = expVal;
             saveData(data);
-            return interaction.reply({ content: `📈 Admin: Set EXP to **${expVal}** for ${target.tag}!`, ephemeral: true });
+            return interaction.reply({ content: `Admin: Set EXP to **${expVal}** for ${target.tag}.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-set-rank') {
@@ -1776,7 +1903,7 @@ client.on('interactionCreate', async interaction => {
             const targetData = getUser(data, target.id);
             targetData.points = pts;
             saveData(data);
-            return interaction.reply({ content: `👑 Admin: Set points to **${pts}** for ${target.tag}!`, ephemeral: true });
+            return interaction.reply({ content: `Admin: Set points to **${pts}** for ${target.tag}.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-run-weather') {
@@ -1789,7 +1916,7 @@ client.on('interactionCreate', async interaction => {
 
             data.currentWeather = { ...wConfig, expiresAt: Date.now() + 3600000 };
             saveData(data);
-            return interaction.reply({ content: `🌤️ Admin: Weather forcibly changed to **${wName}**!`, ephemeral: true });
+            return interaction.reply({ content: `Admin: Weather forced to **${wName}**.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-reset-account') {
@@ -1797,11 +1924,11 @@ client.on('interactionCreate', async interaction => {
             if (target) {
                 delete data.users[target.id];
                 saveData(data);
-                return interaction.reply({ content: `⚠️ Admin: Reset account data for ${target.tag}.`, ephemeral: true });
+                return interaction.reply({ content: `Admin: Reset account data for ${target.tag}.`, ephemeral: true });
             } else {
                 data.users = {};
                 saveData(data);
-                return interaction.reply({ content: `⚠️ Admin: Reset ALL user accounts in database!`, ephemeral: true });
+                return interaction.reply({ content: `Admin: Reset all user accounts in database.`, ephemeral: true });
             }
         }
 
@@ -1811,7 +1938,7 @@ client.on('interactionCreate', async interaction => {
                 data.admins.push(targetUser.id);
                 saveData(data);
             }
-            return interaction.reply({ content: `🛡️ Owner: Granted admin permissions successfully!`, ephemeral: true });
+            return interaction.reply({ content: `Owner: Granted admin permissions successfully.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-luck-event') {
@@ -1819,13 +1946,13 @@ client.on('interactionCreate', async interaction => {
             const timeStr = interaction.options.getString('time');
             const durationMs = parseDuration(timeStr);
 
-            if (!durationMs) return interaction.reply({ content: '❌ Invalid time format!', ephemeral: true });
+            if (!durationMs) return interaction.reply({ content: '❌ Invalid time format.', ephemeral: true });
 
             data.globalEvent.luckBonus = amount;
             data.globalEvent.luckExpiresAt = Date.now() + durationMs;
             saveData(data);
 
-            return interaction.reply({ content: `✨ Global Luck Event activated (+${Math.round(amount*100)}%) for ${timeStr}!` });
+            return interaction.reply({ content: `Global Luck Event activated (+${Math.round(amount*100)}%) for ${timeStr}.` });
         }
 
         else if (commandName === 'admin-catching-rate-event') {
@@ -1833,19 +1960,19 @@ client.on('interactionCreate', async interaction => {
             const timeStr = interaction.options.getString('time');
             const durationMs = parseDuration(timeStr);
 
-            if (!durationMs) return interaction.reply({ content: '❌ Invalid time format!', ephemeral: true });
+            if (!durationMs) return interaction.reply({ content: '❌ Invalid time format.', ephemeral: true });
 
             data.globalEvent.catchRateBonus = amount;
             data.globalEvent.catchRateExpiresAt = Date.now() + durationMs;
             saveData(data);
 
-            return interaction.reply({ content: `🎯 Global Catch Rate Event activated (+${amount}%) for ${timeStr}!` });
+            return interaction.reply({ content: `Global Catch Rate Event activated (+${amount}%) for ${timeStr}.` });
         }
 
     } catch (err) {
         console.error(err);
         if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: 'An error occurred processing this command.', ephemeral: true });
+            await interaction.reply({ content: 'An error occurred while executing this command.', ephemeral: true });
         }
     }
 });
