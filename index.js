@@ -1700,88 +1700,69 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ embeds: [embed] });
         }
 
-        // --- RPG PROFILE CARD (Canvas or Embed Fallback) ---
+    
+        // --- RPG PROFILE CARD (Clean Text Canvas) ---
         else if (commandName === 'profiles') {
-    await interaction.deferReply();
-    const target = interaction.options.getUser('user') || interaction.user;
-    const tData = getUser(data, target.id);
-    updateBadgesAndRanks(tData, target.id, data);
+            await interaction.deferReply();
+            const target = interaction.options.getUser('user') || interaction.user;
+            const tData = getUser(data, target.id);
+            updateBadgesAndRanks(tData, target.id, data);
 
-    try {
-        const canvas = Canvas.createCanvas(900, 300);
-        const ctx = canvas.getContext('2d');
+            try {
+                const canvas = Canvas.createCanvas(900, 300);
+                const ctx = canvas.getContext('2d');
 
-        const bgPath = path.join(__dirname, 'assets', 'profile_bg.png');
-        if (fs.existsSync(bgPath)) {
-            const background = await Canvas.loadImage(bgPath);
-            ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
-        } else {
-            ctx.fillStyle = '#2b2d31';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
+                const bgPath = path.join(__dirname, 'assets', 'profile_bg.png');
+                if (fs.existsSync(bgPath)) {
+                    const background = await Canvas.loadImage(bgPath);
+                    ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
+                } else {
+                    ctx.fillStyle = '#2b2d31';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                }
 
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillRect(30, 25, 840, 250);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                ctx.fillRect(30, 25, 840, 250);
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(105, 150, 65, 0, Math.PI * 2, true);
-        ctx.closePath();
-        ctx.clip();
-        const avatarURL = target.displayAvatarURL({ extension: 'png', size: 256 });
-        const avatar = await Canvas.loadImage(avatarURL);
-        ctx.drawImage(avatar, 40, 85, 130, 130);
-        ctx.restore();
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(105, 150, 65, 0, Math.PI * 2, true);
+                ctx.closePath();
+                ctx.clip();
+                const avatarURL = target.displayAvatarURL({ extension: 'png', size: 256 });
+                const avatar = await Canvas.loadImage(avatarURL);
+                ctx.drawImage(avatar, 40, 85, 130, 130);
+                ctx.restore();
 
-        ctx.strokeStyle = '#5865F2';
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.arc(105, 150, 65, 0, Math.PI * 2, true);
-        ctx.stroke();
+                ctx.strokeStyle = '#5865F2';
+                ctx.lineWidth = 6;
+                ctx.beginPath();
+                ctx.arc(105, 150, 65, 0, Math.PI * 2, true);
+                ctx.stroke();
 
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 32px sans-serif';
-        ctx.fillText(target.username, 200, 80);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 32px sans-serif';
+                ctx.fillText(target.username, 200, 80);
 
-        ctx.font = '20px sans-serif';
-        ctx.fillStyle = '#b9bbbe';
-        ctx.fillText(`Title: ${tData.equippedTitle || 'No Title'}`, 200, 115);
+                ctx.font = '20px sans-serif';
+                ctx.fillStyle = '#b9bbbe';
+                ctx.fillText(`Title: ${tData.equippedTitle || 'No Title'}`, 200, 115);
 
-        ctx.fillStyle = '#00ffcc';
-        ctx.font = 'bold 20px sans-serif';
-        ctx.fillText(`Level: ${tData.level}   |   Points: ${tData.points || 0} pts`, 200, 160);
+                ctx.fillStyle = '#00ffcc';
+                ctx.font = 'bold 20px sans-serif';
+                ctx.fillText(`Level: ${tData.level}   |   Points: ${tData.points || 0} pts`, 200, 160);
 
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '18px sans-serif';
-        ctx.fillText(`Wallet: ${formatCurrency(tData.wallet)} coins   |   Bank: ${formatCurrency(tData.bank)} coins`, 200, 205);
-        ctx.fillText(`Total Hunts: ${(tData.totalHunts || 0).toLocaleString()}`, 200, 240);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '18px sans-serif';
+                ctx.fillText(`Wallet: ${formatCurrency(tData.wallet)} coins   |   Bank: ${formatCurrency(tData.bank)} coins`, 200, 205);
+                ctx.fillText(`Total Hunts: ${(tData.totalHunts || 0).toLocaleString()}`, 200, 240);
 
-        const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'profile-card.png' });
-        return interaction.editReply({ files: [attachment] });
-    } catch (err) {
-        console.error('Canvas error:', err);
-        return interaction.editReply({ content: `🪙 Wallet: **${formatCurrency(tData.wallet)} coins** | 🏦 Bank: **${formatCurrency(tData.bank)} coins**` });
-    }
-}
-
-        // --- TRADE ---
-        else if (commandName === 'trade') {
-            const target = interaction.options.getUser('target');
-            if (target.id === interaction.user.id) return interaction.reply({ content: '❌ You cannot trade with yourself.', ephemeral: true });
-
-            const embed = new EmbedBuilder()
-                .setTitle('Secure Interactive Trade')
-                .setColor('#ffaa00')
-                .setDescription(`Trade session between **${interaction.user.username}** and **${target.username}**.\n\n` +
-                    `**${interaction.user.username}**\n` +
-                    `| Click the button to offer items or coins.\n\n` +
-                    `**${target.username}**`);
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`trade_offer_${target.id}_${interaction.user.id}`).setLabel('Click to Offer').setStyle(ButtonStyle.Primary)
-            );
-
-            return interaction.reply({ embeds: [embed], components: [row] });
+                const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'profile-card.png' });
+                return interaction.editReply({ files: [attachment] });
+            } catch (err) {
+                console.error('Canvas error:', err);
+                return interaction.editReply({ content: `Wallet: **${formatCurrency(tData.wallet)} coins** | Bank: **${formatCurrency(tData.bank)} coins**` });
+            }
         }
 
         // --- BANK & GIVE ---
