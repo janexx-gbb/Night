@@ -98,8 +98,8 @@ function saveData(data) {
 function getUser(data, userId) {
     if (!data.users[userId]) {
         data.users[userId] = { 
-            wallet: 500, 
-            bank: 1000, 
+            wallet: 0, 
+            bank: 0, 
             inventory: [], 
             boxes: { Rare: 0, Epic: 0, Ultra: 0, Legendary: 0, GOD: 0 },
             lootboxes: 0,
@@ -139,7 +139,7 @@ function getUser(data, userId) {
 }
 
 // --- CUSTOM COIN ICON & FORMATTER ---
-const COIN_ICON = '<:coin:1570562525274316920>'; 
+const COIN_ICON = '💰'; 
 const BANK_ICON = '🏦';
 const WALLET_ICON = '🪙';
 
