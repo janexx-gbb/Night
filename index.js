@@ -8,13 +8,11 @@ const {
     ActionRowBuilder, 
     ButtonBuilder, 
     ButtonStyle, 
-    PermissionFlagsBits,
-    AttachmentBuilder
+    PermissionFlagsBits 
 } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
-const Canvas = require('canvas');
 
 const client = new Client({
     intents: [
@@ -109,7 +107,7 @@ function getUser(data, userId) {
             cooldowns: {},
             titles: [],
             equippedTitle: null,
-            started: false,
+            started: false, // Required check for /start
             dailyStreak: 0,
             lastDailyTimestamp: 0,
             lastWeeklyTimestamp: 0,
@@ -140,11 +138,7 @@ function getUser(data, userId) {
     return u;
 }
 
-// --- CUSTOM COIN ICON & FORMATTER ---
-const COIN_ICON = '<:coin:1570562525274316920>'; 
-const BANK_ICON = '🏦';
-const WALLET_ICON = '🪙';
-
+// --- CURRENCY SHORT FORMATTER ---
 function formatCurrency(amount) {
     if (amount >= 1e12) return (amount / 1e12).toFixed(1).replace(/\.0$/, '') + 'T';
     if (amount >= 1e9) return (amount / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
@@ -528,7 +522,7 @@ function formatTitleDisplay(titleName) {
     return `\`${titleName}\``;
 }
 
-// --- ICON ONLY COLLECTION FORMAT ---
+// --- ICON ONLY COLLECTION FORMAT (No Line Borders on Embeds) ---
 function buildCollectionDisplay(userObj, username) {
     const embed = new EmbedBuilder()
         .setTitle(`📜 ${username}'s Animal Collection`)
@@ -590,6 +584,7 @@ function pickWeightedAnimal(animalsPool, totalLuckMultiplier, flatCatchBonus) {
     return weightedList[0].animal;
 }
 
+// --- HELPER FUNCTION TO FETCH MEMES ---
 function fetchMeme() {
     return new Promise((resolve, reject) => {
         https.get('https://meme-api.com/gimme', (res) => {
@@ -739,13 +734,12 @@ client.once('ready', async () => {
     console.log('Slash commands synchronized.');
 });
 
-// --- DYNAMIC BOT STATUS: [Server Count] /start ---
+// --- SET BOT STATUS TO [Server Invite] /start ---
 setInterval(() => {
-    const serverCount = client.guilds.cache.size;
-    client.user.setActivity(`[${serverCount} Servers] /start`, { type: 0 });
+    client.user.setActivity('[Server Invite] /start', { type: 0 });
 }, 60000);
 
-function checkCooldown(user, commandName, seconds = 3) {
+function checkCooldown(user, commandName, seconds = 3) { // Updated to 3 seconds cooldown
     const now = Date.now();
     if (!user.cooldowns) user.cooldowns = {};
     const expiration = (user.cooldowns[commandName] || 0) + (seconds * 1000);
@@ -772,7 +766,8 @@ client.on('interactionCreate', async interaction => {
                 .setColor('#ffaa00')
                 .setDescription(`Trade session active between users.\n\n` +
                     `**User 1 (${initiatorId === interaction.user.id ? interaction.user.username : 'Partner'})**\n` +
-                    `| Click the button to confirm or cancel your trade offerings.`);
+                    `| Click the button to confirm or cancel your trade offerings.\n\n` +
+                    `**User 2 (${targetId === interaction.user.id ? interaction.user.username : 'Partner'})**`);
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`trade_accept_${initiatorId}_${targetId}`).setLabel('Confirm Trade').setStyle(ButtonStyle.Success),
@@ -806,6 +801,7 @@ client.on('interactionCreate', async interaction => {
         }
         saveData(data);
 
+        // Send Welcome Message via DM
         try {
             const dmEmbed = new EmbedBuilder()
                 .setTitle('Welcome to Night (BETA)!')
@@ -818,11 +814,14 @@ client.on('interactionCreate', async interaction => {
                     '• `/help` - View all available bot commands\n\n' +
                     'Good luck on your adventure!');
             await interaction.user.send({ embeds: [dmEmbed] });
-        } catch (e) {}
+        } catch (e) {
+            // DMs might be closed
+        }
 
         return interaction.reply({ content: '✅ Profile successfully initialized! Check your DMs for a welcome message and command overview.', ephemeral: true });
     }
 
+    // Check if user has started
     if (!user.started && commandName !== 'help') {
         return interaction.reply({ content: '⚠️ Please run the `/start` command first to initialize your profile and begin playing!', ephemeral: true });
     }
@@ -840,6 +839,7 @@ client.on('interactionCreate', async interaction => {
     }
 
     try {
+        // Universal 3-Second Cooldown Check (Excluding /start and /help)
         if (commandName !== 'start' && commandName !== 'help') {
             const cd = checkCooldown(user, commandName, 3);
             if (cd > 0) {
@@ -855,11 +855,11 @@ client.on('interactionCreate', async interaction => {
                 .setColor('#5865F2')
                 .setDescription('Here is the complete list of available commands:')
                 .addFields(
-                    { name: 'Getting Started', value: '`/start` - Initialize profile & claim Beta title\n`/help` - View command directory', inline: false },
-                    { name: 'Hunting & Combat', value: '`/hunt` - Go hunting for animals & boxes\n`/team` - Equip animals to your active combat slots\n`/battle` - Battle another player in the arena\n`/animal-stats` - View active team combat statistics', inline: false },
-                    { name: 'Profile & Progress', value: '`/profiles` - View your RPG profile card\n`/rank` - Check points and rank tier badge\n`/level` - Check user and animal level/EXP status\n`/collection` - View your animal collection\n`/titles` - View and equip unlocked titles\n`/titlelist` - View all available titles', inline: false },
-                    { name: 'Economy & Shop', value: '`/balance` - Check wallet and bank\n`/shop` - Browse weapons and charms\n`/buy` - Purchase shop items\n`/equip` - Equip an item or charm\n`/beg` / `/work` - Earn starter coins\n`/coinflip` / `/slot` / `/blackjack` / `/trivia` - Play mini-games\n`/market` / `/sell` / `/buy-market` - Community player market\n`/inventory` - Check items and boxes', inline: false },
-                    { name: 'Utilities & Events', value: '`/daily` / `/weekly` - Claim recurring rewards\n`/quest` - View active daily/weekly tasks\n`/event` / `/stats` - Check weather and active boost stats\n`/meme` - Generate a random meme\n`/trade` - Secure player trading', inline: false }
+                    { name: '🎮 Getting Started', value: '`/start` - Initialize profile & claim Beta title\n`/help` - View command directory', inline: false },
+                    { name: '🎯 Hunting & Combat', value: '`/hunt` - Go hunting for animals & boxes\n`/team` - Equip animals to your active combat slots\n`/battle` - Battle another player in the arena\n`/animal-stats` - View active team combat statistics', inline: false },
+                    { name: '👤 Profile & Progress', value: '`/profiles` - View your RPG profile card\n`/rank` - Check points and rank tier badge\n`/level` - Check user and animal level/EXP status\n`/collection` - View your animal collection\n`/titles` - View and equip unlocked titles\n`/titlelist` - View all available titles', inline: false },
+                    { name: '🪙 Economy & Shop', value: '`/balance` - Check wallet and bank\n`/shop` - Browse weapons and charms\n`/buy` - Purchase shop items\n`/equip` - Equip an item or charm\n`/beg` / `/work` - Earn starter coins\n`/coinflip` / `/slot` / `/blackjack` / `/trivia` - Play mini-games\n`/market` / `/sell` / `/buy-market` - Community player market\n`/inventory` - Check items and boxes', inline: false },
+                    { name: '🎁 Utilities & Events', value: '`/daily` / `/weekly` - Claim recurring rewards\n`/quest` - View active daily/weekly tasks\n`/event` / `/stats` - Check weather and active boost stats\n`/meme` - Generate a random meme\n`/trade` - Secure player trading', inline: false }
                 );
             return interaction.reply({ embeds: [embed] });
         }
@@ -899,7 +899,7 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ content: `✅ Successfully equipped **${foundItem}** from your inventory.`, ephemeral: true });
         }
 
-        // --- BALANCE (With Custom Coin Icons) ---
+        // --- BALANCE ---
         else if (commandName === 'balance') {
             const target = interaction.options.getUser('user') || interaction.user;
             const tData = getUser(data, target.id);
@@ -908,8 +908,8 @@ client.on('interactionCreate', async interaction => {
                 .setColor('#0099ff')
                 .setTitle(`Balance — ${target.username}${titleDisplay}`)
                 .addFields(
-                    { name: `${WALLET_ICON} Wallet`, value: `${COIN_ICON} ${formatCurrency(tData.wallet)} coins`, inline: true },
-                    { name: `${BANK_ICON} Bank`, value: `${COIN_ICON} ${formatCurrency(tData.bank)} coins`, inline: true }
+                    { name: 'Wallet', value: `${formatCurrency(tData.wallet)} coins`, inline: true },
+                    { name: 'Bank', value: `${formatCurrency(tData.bank)} coins`, inline: true }
                 );
             return interaction.reply({ embeds: [embed] });
         }
@@ -925,7 +925,7 @@ client.on('interactionCreate', async interaction => {
             trackQuestProgress(user, 'beg', 1);
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
-            return interaction.reply(`You begged on the streets and received ${COIN_ICON} **${formatCurrency(amt)} coins**.`);
+            return interaction.reply(`You begged on the streets and received **${formatCurrency(amt)} coins**.`);
         }
 
         // --- WORK ---
@@ -935,7 +935,7 @@ client.on('interactionCreate', async interaction => {
             trackQuestProgress(user, 'work', 1);
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
-            return interaction.reply(`You completed your shift and earned ${COIN_ICON} **${formatCurrency(amt)} coins**.`);
+            return interaction.reply(`You completed your shift and earned **${formatCurrency(amt)} coins**.`);
         }
 
         // --- COINFLIP ---
@@ -947,10 +947,10 @@ client.on('interactionCreate', async interaction => {
             const outcome = Math.random() < 0.53 ? (choice === 'heads' ? 'tails' : 'heads') : choice;
             if (choice === outcome) {
                 user.wallet += amount;
-                await interaction.reply(`The coin landed on **${outcome}**. You won ${COIN_ICON} **${formatCurrency(amount)} coins**.`);
+                await interaction.reply(`The coin landed on **${outcome}**. You won **${formatCurrency(amount)} coins**.`);
             } else {
                 user.wallet -= amount;
-                await interaction.reply(`The coin landed on **${outcome}**. You lost ${COIN_ICON} **${formatCurrency(amount)} coins**.`);
+                await interaction.reply(`The coin landed on **${outcome}**. You lost **${formatCurrency(amount)} coins**.`);
             }
             trackQuestProgress(user, 'coinflip', 1);
             saveData(data);
@@ -974,18 +974,18 @@ client.on('interactionCreate', async interaction => {
                     user.titles.push('JACKPOT');
                     await interaction.channel.send(`🎉 Congrats **${interaction.user.username}** 🎉 You Unlocked **JACKPOT** title!`);
                 }
-                await interaction.reply(`[ ${r1} | ${r2} | ${r3} ] DIAMOND JACKPOT! You won ${COIN_ICON} **${formatCurrency(winnings)} coins**.`);
+                await interaction.reply(`[ ${r1} | ${r2} | ${r3} ] DIAMOND JACKPOT! You won **${formatCurrency(winnings)} coins**.`);
             } else if (r1 === r2 && r2 === r3) {
                 const winnings = amount * 5;
                 user.wallet += winnings;
-                await interaction.reply(`[ ${r1} | ${r2} | ${r3} ] Triple match! You won ${COIN_ICON} **${formatCurrency(winnings)} coins**.`);
+                await interaction.reply(`[ ${r1} | ${r2} | ${r3} ] Triple match! You won **${formatCurrency(winnings)} coins**.`);
             } else if (r1 === r2 || r2 === r3 || r1 === r3) {
                 const winnings = Math.floor(amount * 1.2);
                 user.wallet += winnings;
-                await interaction.reply(`[ ${r1} | ${r2} | ${r3} ] Partial match. You won ${COIN_ICON} **${formatCurrency(winnings)} coins**.`);
+                await interaction.reply(`[ ${r1} | ${r2} | ${r3} ] Partial match. You won **${formatCurrency(winnings)} coins**.`);
             } else {
                 user.wallet -= amount;
-                await interaction.reply(`[ ${r1} | ${r2} | ${r3} ] No match. You lost ${COIN_ICON} **${formatCurrency(amount)} coins**.`);
+                await interaction.reply(`[ ${r1} | ${r2} | ${r3} ] No match. You lost **${formatCurrency(amount)} coins**.`);
             }
             trackQuestProgress(user, 'slot', 1);
             saveData(data);
@@ -1002,12 +1002,12 @@ client.on('interactionCreate', async interaction => {
 
             if (playerSum > 21 || (playerSum < dealerSum && dealerSum <= 21)) {
                 user.wallet -= amount;
-                await interaction.reply(`Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You lost ${COIN_ICON} **${formatCurrency(amount)} coins**.`);
+                await interaction.reply(`Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You lost **${formatCurrency(amount)} coins**.`);
             } else if (playerSum === dealerSum) {
                 await interaction.reply(`Blackjack: Push! Both had ${playerSum}. Bet returned.`);
             } else {
                 user.wallet += amount;
-                await interaction.reply(`Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You won ${COIN_ICON} **${formatCurrency(amount)} coins**.`);
+                await interaction.reply(`Blackjack: Your sum (${playerSum}) vs Dealer (${dealerSum}). You won **${formatCurrency(amount)} coins**.`);
             }
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
@@ -1019,7 +1019,7 @@ client.on('interactionCreate', async interaction => {
             user.wallet += reward;
             saveData(data);
             await checkAndAwardTitles(user, interaction.user, interaction);
-            return interaction.reply(`Trivia solved successfully! You earned ${COIN_ICON} **${formatCurrency(reward)} coins**.`);
+            return interaction.reply(`Trivia solved successfully! You earned **${formatCurrency(reward)} coins**.`);
         }
 
         // --- SHOP ---
@@ -1029,8 +1029,8 @@ client.on('interactionCreate', async interaction => {
 
             const itemsToShow = category ? data.shopItems.filter(i => i.category === category) : data.shopItems;
 
-            const gunList = itemsToShow.filter(i => i.category === 'Gun').map(i => `**[ID: ${i.id}] ${i.name}** - ${COIN_ICON} ${formatCurrency(i.price)} coins\n└ *${i.description}*`).join('\n\n');
-            const charmList = itemsToShow.filter(i => i.category === 'Charm').map(i => `**[ID: ${i.id}] ${i.name}** - ${COIN_ICON} ${formatCurrency(i.price)} coins\n└ *${i.description}* (Non-stackable)`).join('\n\n');
+            const gunList = itemsToShow.filter(i => i.category === 'Gun').map(i => `**[ID: ${i.id}] ${i.name}** - ${formatCurrency(i.price)} coins\n└ *${i.description}*`).join('\n\n');
+            const charmList = itemsToShow.filter(i => i.category === 'Charm').map(i => `**[ID: ${i.id}] ${i.name}** - ${formatCurrency(i.price)} coins\n└ *${i.description}* (Non-stackable)`).join('\n\n');
 
             if (!category || category === 'Gun') {
                 embed.addFields({ name: 'Gun Category', value: gunList || 'No guns available.' });
@@ -1057,7 +1057,7 @@ client.on('interactionCreate', async interaction => {
             user.wallet -= item.price;
             user.inventory.push(item.name);
             saveData(data);
-            return interaction.reply(`Successfully purchased **${item.name}** for ${COIN_ICON} ${formatCurrency(item.price)} coins.`);
+            return interaction.reply(`Successfully purchased **${item.name}** for ${formatCurrency(item.price)} coins.`);
         }
 
         // --- MARKET ---
@@ -1112,7 +1112,7 @@ client.on('interactionCreate', async interaction => {
             }
 
             saveData(data);
-            return interaction.reply(`Listed **${qty}x ${typeName}** on the community market for ${COIN_ICON} ${formatCurrency(amount)} coins. (Listing ID: ${data.marketListings.length})`);
+            return interaction.reply(`Listed **${qty}x ${typeName}** on the community market for ${formatCurrency(amount)} coins. (Listing ID: ${data.marketListings.length})`);
         }
 
         else if (commandName === 'market') {
@@ -1120,7 +1120,7 @@ client.on('interactionCreate', async interaction => {
             if (data.marketListings.length === 0) {
                 embed.setDescription('No active listings available on the market.');
             } else {
-                const list = data.marketListings.map(l => `**[ID: ${l.id}]** ${l.quantity}x **${l.name}** (${l.type}) by **${l.sellerName}** — ${COIN_ICON} **${formatCurrency(l.price)} coins**`).join('\n');
+                const list = data.marketListings.map(l => `**[ID: ${l.id}]** ${l.quantity}x **${l.name}** (${l.type}) by **${l.sellerName}** — **${formatCurrency(l.price)} coins**`).join('\n');
                 embed.setDescription(list);
             }
             return interaction.reply({ embeds: [embed] });
@@ -1149,7 +1149,7 @@ client.on('interactionCreate', async interaction => {
             data.marketListings = data.marketListings.filter(l => l.id !== id);
             saveData(data);
 
-            return interaction.reply(`Successfully purchased ${listing.quantity}x **${listing.name}** from **${listing.sellerName}** for ${COIN_ICON} ${formatCurrency(listing.price)} coins.`);
+            return interaction.reply(`Successfully purchased ${listing.quantity}x **${listing.name}** from **${listing.sellerName}** for ${formatCurrency(listing.price)} coins.`);
         }
 
         // --- TEAM EQUIPPING (/team) ---
@@ -1319,7 +1319,7 @@ client.on('interactionCreate', async interaction => {
                 embed.setTitle('Leaderboard — Top 10 Total Money');
                 const lines = top10.map((u, index) => {
                     const rankIcon = getRankBadge(u.points);
-                    return `**#${index+1}** <@${u.userId}> — ${COIN_ICON} **${formatCurrency(u.money)} coins** ${rankIcon}`;
+                    return `**#${index+1}** <@${u.userId}> — **${formatCurrency(u.money)} coins** ${rankIcon}`;
                 });
                 embed.setDescription(lines.join('\n') || 'No players on leaderboard yet.');
             } else if (category === 'points') {
@@ -1437,7 +1437,7 @@ client.on('interactionCreate', async interaction => {
                 } else if (Math.random() < 0.5) {
                     const coinAmt = Math.floor(Math.random() * 5000) + 1;
                     user.wallet += coinAmt;
-                    rewardsSummary.push(`${COIN_ICON} ${formatCurrency(coinAmt)} coins`);
+                    rewardsSummary.push(`${formatCurrency(coinAmt)} coins`);
                 } else {
                     const standardAnimals = HUNT_ANIMALS.filter(a => a.tier !== 'Shiny');
                     const randAnimal = pickWeightedAnimal(standardAnimals, boosts.totalLuckMultiplier, boosts.flatCatchBonus);
@@ -1492,7 +1492,7 @@ client.on('interactionCreate', async interaction => {
                 if (Math.random() < 0.5) {
                     const coinDrop = Math.floor(Math.random() * maxCoins) + 1;
                     user.wallet += coinDrop;
-                    rewardsSummary.push(`${COIN_ICON} ${formatCurrency(coinDrop)} coins`);
+                    rewardsSummary.push(`${formatCurrency(coinDrop)} coins`);
                 } else {
                     const effectiveShinyChance = (baseShinyChance * boosts.totalLuckMultiplier) + (boosts.flatCatchBonus * 0.01);
                     if (Math.random() < effectiveShinyChance) {
@@ -1700,69 +1700,49 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ embeds: [embed] });
         }
 
-    
-        // --- RPG PROFILE CARD (Clean Text Canvas) ---
+        // --- RPG PROFILE ---
         else if (commandName === 'profiles') {
-            await interaction.deferReply();
             const target = interaction.options.getUser('user') || interaction.user;
             const tData = getUser(data, target.id);
             updateBadgesAndRanks(tData, target.id, data);
 
-            try {
-                const canvas = Canvas.createCanvas(900, 300);
-                const ctx = canvas.getContext('2d');
+            const totalHuntCount = tData.totalHunts || 0;
+            const rankBadge = getRankBadge(tData.points || 0);
+            const badgeDisplay = tData.badges.length > 0 ? tData.badges.join(' ') : 'No badges earned yet';
 
-                const bgPath = path.join(__dirname, 'assets', 'profile_bg.png');
-                if (fs.existsSync(bgPath)) {
-                    const background = await Canvas.loadImage(bgPath);
-                    ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
-                } else {
-                    ctx.fillStyle = '#2b2d31';
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                }
+            const embed = new EmbedBuilder()
+                .setColor('#5865F2')
+                .setThumbnail(target.displayAvatarURL({ dynamic: true }))
+                .setTitle(`RPG Profile Card — ${target.username}`)
+                .setDescription(`Title: ${formatTitleDisplay(tData.equippedTitle)}\nRank Badge: ${rankBadge}`)
+                .addFields(
+                    { name: 'Combat & Stats', value: `Level: **${tData.level}**\nPoints: **${tData.points || 0} pts**\nTotal Hunts: **${totalHuntCount.toLocaleString()}**`, inline: true },
+                    { name: 'Economy', value: `Wallet: **${formatCurrency(tData.wallet)} coins**\nBank: **${formatCurrency(tData.bank)} coins**`, inline: true },
+                    { name: 'Earned Badges', value: badgeDisplay, inline: false }
+                )
+                .setTimestamp();
 
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-                ctx.fillRect(30, 25, 840, 250);
+            return interaction.reply({ embeds: [embed] });
+        }
 
-                ctx.save();
-                ctx.beginPath();
-                ctx.arc(105, 150, 65, 0, Math.PI * 2, true);
-                ctx.closePath();
-                ctx.clip();
-                const avatarURL = target.displayAvatarURL({ extension: 'png', size: 256 });
-                const avatar = await Canvas.loadImage(avatarURL);
-                ctx.drawImage(avatar, 40, 85, 130, 130);
-                ctx.restore();
+        // --- TRADE ---
+        else if (commandName === 'trade') {
+            const target = interaction.options.getUser('target');
+            if (target.id === interaction.user.id) return interaction.reply({ content: '❌ You cannot trade with yourself.', ephemeral: true });
 
-                ctx.strokeStyle = '#5865F2';
-                ctx.lineWidth = 6;
-                ctx.beginPath();
-                ctx.arc(105, 150, 65, 0, Math.PI * 2, true);
-                ctx.stroke();
+            const embed = new EmbedBuilder()
+                .setTitle('Secure Interactive Trade')
+                .setColor('#ffaa00')
+                .setDescription(`Trade session between **${interaction.user.username}** and **${target.username}**.\n\n` +
+                    `**${interaction.user.username}**\n` +
+                    `| Click the button to offer items or coins.\n\n` +
+                    `**${target.username}**`);
 
-                ctx.fillStyle = '#ffffff';
-                ctx.font = 'bold 32px sans-serif';
-                ctx.fillText(target.username, 200, 80);
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`trade_offer_${target.id}_${interaction.user.id}`).setLabel('Click to Offer').setStyle(ButtonStyle.Primary)
+            );
 
-                ctx.font = '20px sans-serif';
-                ctx.fillStyle = '#b9bbbe';
-                ctx.fillText(`Title: ${tData.equippedTitle || 'No Title'}`, 200, 115);
-
-                ctx.fillStyle = '#00ffcc';
-                ctx.font = 'bold 20px sans-serif';
-                ctx.fillText(`Level: ${tData.level}   |   Points: ${tData.points || 0} pts`, 200, 160);
-
-                ctx.fillStyle = '#ffffff';
-                ctx.font = '18px sans-serif';
-                ctx.fillText(`Wallet: ${formatCurrency(tData.wallet)} coins   |   Bank: ${formatCurrency(tData.bank)} coins`, 200, 205);
-                ctx.fillText(`Total Hunts: ${(tData.totalHunts || 0).toLocaleString()}`, 200, 240);
-
-                const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'profile-card.png' });
-                return interaction.editReply({ files: [attachment] });
-            } catch (err) {
-                console.error('Canvas error:', err);
-                return interaction.editReply({ content: `Wallet: **${formatCurrency(tData.wallet)} coins** | Bank: **${formatCurrency(tData.bank)} coins**` });
-            }
+            return interaction.reply({ embeds: [embed], components: [row] });
         }
 
         // --- BANK & GIVE ---
@@ -1776,12 +1756,12 @@ client.on('interactionCreate', async interaction => {
                 if (user.wallet < amount) return interaction.reply({ content: '❌ Insufficient wallet balance.', ephemeral: true });
                 user.wallet -= amount;
                 user.bank += amount;
-                await interaction.reply(`Deposited ${COIN_ICON} **${formatCurrency(amount)} coins** into your bank.`);
+                await interaction.reply(`Deposited **${formatCurrency(amount)} coins** into your bank.`);
             } else {
                 if (user.bank < amount) return interaction.reply({ content: '❌ Insufficient bank balance.', ephemeral: true });
                 user.bank -= amount;
                 user.wallet += amount;
-                await interaction.reply(`Withdrew ${COIN_ICON} **${formatCurrency(amount)} coins** to your wallet.`);
+                await interaction.reply(`Withdrew **${formatCurrency(amount)} coins** to your wallet.`);
             }
             saveData(data);
         }
@@ -1797,7 +1777,7 @@ client.on('interactionCreate', async interaction => {
             targetData.wallet += amount;
             saveData(data);
 
-            return interaction.reply(`Successfully transferred ${COIN_ICON} **${formatCurrency(amount)} coins** to ${target.username}.`);
+            return interaction.reply(`Successfully transferred **${formatCurrency(amount)} coins** to ${target.username}.`);
         }
 
         // --- VALIDATED ADMIN COMMANDS ---
@@ -1807,7 +1787,7 @@ client.on('interactionCreate', async interaction => {
             const targetData = getUser(data, target.id);
             targetData.wallet += amount;
             saveData(data);
-            return interaction.reply({ content: `Admin: Added ${COIN_ICON} ${formatCurrency(amount)} coins to ${target.tag}.`, ephemeral: true });
+            return interaction.reply({ content: `Admin: Added ${formatCurrency(amount)} coins to ${target.tag}.`, ephemeral: true });
         }
 
         else if (commandName === 'admin-give-item') {
