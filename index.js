@@ -520,9 +520,9 @@ async function checkAndAwardTitles(user, clientUser, interaction) {
 
 function formatTitleDisplay(titleName) {
     if (!titleName) return '`No Title Equipped`';
-    if (titleName === 'Beta') return '🔮 ```ansi\n\u001b[1;35mBeta\u001b[0m\n```';
-    if (titleName === 'Admin') return '🛡️ '```ansi\n\u001b[1;31mAdmin\u001b[0m\n```';
-    if (titleName === 'Owner') return '👑 '```ansi\n\u001b[1;33mOwner\u001b[0m\n```';
+    if (titleName === 'Beta') return '🔮```ansi\n\u001b[1;35mBeta\u001b[0m\n```';
+    if (titleName === 'Admin') return '🛡️'```ansi\n\u001b[1;31mAdmin\u001b[0m\n```';
+    if (titleName === 'Owner') return '👑'```ansi\n\u001b[1;33mOwner\u001b[0m\n```';
     return `\`${titleName}\``;
 }
 
