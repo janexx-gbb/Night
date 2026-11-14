@@ -141,7 +141,7 @@ function getUser(data, userId) {
 // --- CUSTOM COIN ICON & FORMATTER ---
 const COIN_ICON = '💰'; 
 const BANK_ICON = '🏦';
-const WALLET_ICON = '🪙';
+const WALLET_ICON = '💳';
 
 function formatCurrency(amount) {
     if (amount >= 1e12) return (amount / 1e12).toFixed(1).replace(/\.0$/, '') + 'T';
