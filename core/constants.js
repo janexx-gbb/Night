@@ -223,8 +223,39 @@ const ALL_VALID_COMMANDS = new Set([
   'adminban', 'adminclearlb', 'adminluckevent', 'adminsetxp', 'admingiveitem',
   'adminsetrank', 'adminsetpoints', 'admingivepermission', 'adminsetlevel',
   'testerpanel', 'addtester', 'removetester', 'pubnewupd', 'testerfeature',
-  'testerfeatures', 'tf', 'admingivebadges', 'agb'
+  'testerfeatures', 'tf', 'admingivebadges', 'agb', 'ping'
 ]);
+
+// Short aliases users can type instead of the full command name.
+const COMMAND_ALIASES = new Map(Object.entries({
+  h: 'help',
+  r: 'roll',
+  p: 'profile',
+  inv: 'inventory',
+  col: 'collections',
+  d: 'drop',
+  t: 'trade',
+  pc: 'prefixchange',
+  ec: 'enablec',
+  dc: 'disablec',
+  ac: 'admincommands',
+  oc: 'ownercommands',
+  cnn: 'customnn',
+  ss: 'seasons',
+  hss: 'higheststats',
+  th: 'tradehistory',
+  ccr: 'ccranks',
+  rar: 'rarities',
+  es: 'eshop',
+  ca: 'eadventure',
+  ea: 'eadventure',
+  cadventure: 'eadventure',
+  oss: 'ownersetstatus',
+  tf: 'testerfeatures',
+  agb: 'admingivebadges',
+  cp: 'cpromote',
+  ced: 'ceditdesc'
+}));
 
 const TESTER_ONLY_COMMANDS = new Set([
   'testerfeature', 'testerfeatures', 'tf', 'cpromote', 'cp', 'cannounce', 'kick', 'cmail', 'ceditdesc', 'ced'
@@ -243,5 +274,6 @@ module.exports = {
   SHINY_ICON,
   RARITY_HIERARCHY,
   ALL_VALID_COMMANDS,
+  COMMAND_ALIASES,
   TESTER_ONLY_COMMANDS
 };
