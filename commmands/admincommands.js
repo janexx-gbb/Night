@@ -12,6 +12,7 @@ const {
 const mongoose = require('mongoose');
 const {
   BADGE_CATALOG,
+  BETA_EMOJIS,
   EVENT_ICONS,
   EVENT_CHIBIS_POOL
 } = require('../core/constants');
@@ -119,7 +120,7 @@ async function execute(ctx) {
             `3. **Beta Clan Commands (\`${currentPrefix}cclaninfo\`, \`${currentPrefix}cpromote\`/\`${currentPrefix}cp\`, \`${currentPrefix}kick\`, \`${currentPrefix}cannounce\`, \`${currentPrefix}cmail\`, \`${currentPrefix}ceditdesc\`)**\n` +
             `   • Role hierarchy (Co-Leader, Officer, Deputy), member kicks, clan announcements, description & mail inbox\n` +
             `4. **Interactive Start Button (\`${currentPrefix}start\`)**\n` +
-            `   • Pressable Start button awarding **x50 Dice**\n` +
+            `   • Pressable ${BETA_EMOJIS.START_BTN} Start button awarding **x50 Dice**\n` +
             `5. **Badge System & Owner Grant (\`${currentPrefix}admingivebadges\` / \`${currentPrefix}agb\`)**\n` +
             `   • Discord & Event/Stats badges with automatic requirement unlocks`
           )
