@@ -280,6 +280,7 @@ async function execute(ctx) {
       .addTextDisplayComponents(
         new TextDisplayBuilder().setContent(toSmallCaps(`# ${data.title}\n*(r/${data.subreddit})*`))
       );
+    
     return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
   }
 
