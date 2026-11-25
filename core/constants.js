@@ -379,7 +379,7 @@ const CSELL_RATES = {
 };
 
 const ALL_VALID_COMMANDS = new Set([
-  'start', 'help', 'status', 'roll', 'drop', 'slot', 'shop', 'rarities',
+  'start', 'help', 'status', 'memory', 'roll', 'drop', 'slot', 'shop', 'rarities',
   'event', 'eadventure', 'eshop', 'ecrystal', 'daily', 'points', 'rank', 'ranks',
   'ccranks', 'customnn', 'profilebg', 'setbg', 'seasons', 'higheststats', 'tradehistory',
   'cstats', 'equipteam', 'battle', 'inventory', 'collections', 'profile', 'trade',

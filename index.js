@@ -3,7 +3,7 @@ const path = require('path');
 const {
   Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
   ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SectionBuilder, ThumbnailBuilder,
-  AttachmentBuilder, MessageFlags, PermissionsBitField
+  AttachmentBuilder, MessageFlags, PermissionsBitField, EmbedBuilder, TextChannel
 } = require('discord.js');
 const mongoose = require('mongoose');
 
@@ -363,6 +363,9 @@ client.on('guildCreate', async guild => {
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
 
+  /** @type {import('discord.js').TextChannel} */
+  const channel = message.channel;
+
   const guildId = message.guild ? message.guild.id : 'DM';
   let currentPrefix = (db.guildPrefixes && db.guildPrefixes[guildId]) || '+';
   if (/^[a-zA-Z]$/.test(currentPrefix)) currentPrefix = '+';
@@ -421,7 +424,7 @@ client.on('messageCreate', async message => {
     'ownerresetdata', 'help', 'status', 'fixadmin', 'ownercl', 'owneradminpermsrem',
     'ownersecretpanel', 'event', 'ownerbotmaintenance', 'adminrestoreall', 'ownersetstatus',
     'testerpanel', 'addtester', 'removetester', 'pubnewupd', 'testerfeatures', 'tf',
-    'admingivebadges', 'agb', 'cpromote', 'cp', 'cannounce', 'kick', 'cmail', 'ceditdesc', 'ced'
+    'admingivebadges', 'agb', 'cpromote', 'cp', 'cannounce', 'kick', 'cmail', 'ceditdesc', 'ced', 'cache'
   ];
   if (restrictedChannels.length > 0 && restrictedChannels.includes(message.channel.id) && !exemptCommands.includes(command)) {
     return;
@@ -1491,6 +1494,40 @@ client.on('messageCreate', async message => {
         ))
       );
       return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+    }
+
+    if (command === 'memory') {
+      const formatBytes = (bytes) => {
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let i = 0;
+        while (bytes >= 1024 && i < units.length - 1) {
+          bytes /= 1024;
+          i++;
+        }
+        return `${bytes.toFixed(2)} ${units[i]}`;
+      };
+
+      const usersCached = client.users.cache.size;
+
+      let userCacheBytes = 0;
+      for (const u of client.users.cache.values()) {
+        userCacheBytes += Buffer.byteLength(JSON.stringify(u.toJSON()));
+      }
+
+      const mem = process.memoryUsage();
+
+      const embed = new EmbedBuilder()
+          .setThumbnail(client.user.displayAvatarURL())
+        .setColor('#7FFFD4')
+        .setTitle('🧠 Memory Usage')
+        .addFields(
+          { name: '👥 Cached Users', value: `${usersCached.toLocaleString()} users`, inline: true },
+          { name: '📦 User Cache Size', value: `≈ ${formatBytes(userCacheBytes)}`, inline: true },
+          { name: '💾 Bot Memory (RSS)', value: formatBytes(mem.rss), inline: true },
+          { name: '🧮 Heap Used', value: `${formatBytes(mem.heapUsed)} / ${formatBytes(mem.heapTotal)}`, inline: true }
+        );
+
+      return channel.send({embeds: [embed]});
     }
 
     if (command === 'slot') {
