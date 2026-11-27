@@ -39,6 +39,16 @@ if (fs.existsSync(economyCmdPath)) {
   }
 }
 
+let npcModule = null;
+const npcCmdPath = path.join(__dirname, 'commmands', 'npccommands.js');
+if (fs.existsSync(npcCmdPath)) {
+  try {
+    npcModule = require(npcCmdPath);
+  } catch (err) {
+    console.error('[npccommands] Failed to load module:', err);
+  }
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -49,6 +59,8 @@ const client = new Client({
 });
 
 const cooldowns = new Map();
+const channelSpawnMessageCounters = new Map();
+const NPC_RANDOM_SPAWN_EVERY_N_MESSAGES = 25;
 
 const REVAMPED_RARITY_CONFIG = [
   { key: 'C', label: 'Common', emoji: '<:Pcommon:1573802564200300687>', normalPct: 35, shinyPct: 0.0952, weight: 35 },
@@ -162,6 +174,20 @@ function buildHelpCategories(prefix) {
         `\`${prefix}tradehistory\` (\`${prefix}th\`)`
       ]
     },
+    npcs: {
+      label: 'NPCs & Redeems',
+      emoji: '🥷',
+      title: '🥷 NPCs & Redeems',
+      lines: [
+        `\`${prefix}cnpc\``,
+        `\`${prefix}cget <Npcname>\``,
+        `\`${prefix}nrebirth\``,
+        `\`${prefix}nascend\``,
+        `\`${prefix}nsredeem <NPC name>\` (\`${prefix}nsr\`)`,
+        `\`${prefix}snsredeem <Shiny NPC name>\` (\`${prefix}snsr\`)`,
+        `\`${prefix}redeems\``
+      ]
+    },
     event: {
       label: 'Event System',
       emoji: '🌟',
@@ -253,6 +279,16 @@ function renderHelpMenuRow(selectedKey = null) {
       .addOptions(options)
   );
 }
+
+client.on('interactionCreate', async interaction => {
+  if (npcModule && typeof npcModule.handleNpcInteraction === 'function') {
+    const handledNpc = await npcModule.handleNpcInteraction(interaction).catch(err => {
+      console.error('[npcInteraction] Error:', err);
+      return false;
+    });
+    if (handledNpc) return;
+  }
+});
 
 client.once('clientReady', async () => {
   console.log(`Logged in as ${client.user.tag}! Bot is ready.`);
@@ -361,12 +397,30 @@ client.on('guildCreate', async guild => {
 });
 
 client.on('messageCreate', async message => {
-  if (message.author.bot) return;
+  if (message.author?.id === client.user?.id) return;
 
   const guildId = message.guild ? message.guild.id : 'DM';
   let currentPrefix = (db.guildPrefixes && db.guildPrefixes[guildId]) || '+';
   if (/^[a-zA-Z]$/.test(currentPrefix)) currentPrefix = '+';
 
+  // NPC leveling via chatting and using other bots + periodic random NPC spawn
+  if (npcModule && message.guild && !message.content.startsWith(currentPrefix)) {
+    const actorUserId = message.author.id;
+    if (db.users?.[actorUserId]?.started) {
+      await npcModule.processNpcChatOrBotActivity(message, db.users[actorUserId], currentPrefix).catch(() => {});
+    }
+    if (!message.author.bot && typeof npcModule.spawnNpcInChannel === 'function') {
+      const nextCount = (channelSpawnMessageCounters.get(message.channel.id) || 0) + 1;
+      if (nextCount >= NPC_RANDOM_SPAWN_EVERY_N_MESSAGES) {
+        channelSpawnMessageCounters.set(message.channel.id, 0);
+        await npcModule.spawnNpcInChannel(message.channel, currentPrefix, null).catch(() => {});
+      } else {
+        channelSpawnMessageCounters.set(message.channel.id, nextCount);
+      }
+    }
+  }
+
+  if (message.author.bot) return;
   if (!message.content.startsWith(currentPrefix)) return;
   const afterPrefix = message.content.slice(currentPrefix.length);
   if (!afterPrefix || afterPrefix.startsWith(' ')) return;
@@ -387,12 +441,16 @@ client.on('messageCreate', async message => {
     tf: 'testerfeatures', agb: 'admingivebadges', cp: 'cpromote', ced: 'ceditdesc',
     w: 'work', wg: 'working', ws: 'workshift', bal: 'balance', cs: 'casino',
     bj: 'blackjack', cf: 'coinflip', tb: 'ticketbuy', tu: 'ticketuse', lot: 'lottery',
-    sell: 'csell'
+    sell: 'csell', fns: 'fnpcspawn', nsr: 'nsredeem', snsr: 'snsredeem'
   };
   if (shortcuts[command]) command = shortcuts[command];
 
   const isEconomyCmd = Array.isArray(economyModule?.commands) && economyModule.commands.includes(command);
-  if (!ALL_VALID_COMMANDS.has(command) && !isEconomyCmd) return;
+  const isNpcCmd = Array.isArray(npcModule?.commands) && npcModule.commands.includes(command);
+  const npcAdminCmds = ['fnpcspawn', 'redeemgive', 'sredeemgive'];
+  const isNpcAdminCmd = npcAdminCmds.includes(command);
+
+  if (!ALL_VALID_COMMANDS.has(command) && !isEconomyCmd && !isNpcCmd && !isNpcAdminCmd) return;
 
   const userId = message.author.id;
   const isOwner = () => {
@@ -597,6 +655,52 @@ client.on('messageCreate', async message => {
       return message.reply(toSmallCaps(`❌ You must type ${currentPrefix}start before using any bot commands!`));
     }
 
+    const isAdmin = () => isOwner() || user.permissions === true;
+
+    // Admin NPC & Redeem Commands (+fnpcspawn / +fns, +redeemgive, +sredeemgive)
+    if (isNpcAdminCmd && npcModule) {
+      if (!isAdmin()) {
+        return message.reply(toSmallCaps('❌ This command is for admins only!'));
+      }
+      if (command === 'fnpcspawn') {
+        const query = args.join(' ').trim();
+        const template = query ? npcModule.findNpcTemplateByName(query) : null;
+        if (query && !template) {
+          return message.reply(toSmallCaps(`❌ Could not find NPC "${query}".`));
+        }
+        await npcModule.spawnNpcInChannel(message.channel, currentPrefix, template || null);
+        return;
+      }
+      if (command === 'redeemgive' || command === 'sredeemgive') {
+        const targetUser = message.mentions.users.first();
+        if (!targetUser) {
+          return message.reply(toSmallCaps(`❌ Usage: \`${currentPrefix}${command} @user [quantity]\``));
+        }
+        const qty = Math.max(1, parseInt(args[1], 10) || 1);
+        ensureUser(targetUser.id);
+        const targetData = db.users[targetUser.id];
+        npcModule.ensureNpcUserFields(targetData);
+        if (command === 'redeemgive') {
+          targetData.redeems += qty;
+        } else {
+          targetData.shinyRedeems += qty;
+        }
+        await saveUsers();
+        return message.reply(toSmallCaps(
+          `✅ Gave **${qty}x** ${command === 'redeemgive' ? 'Redeem' : 'Shiny Redeem'} to **${targetUser.username}**!`
+        ));
+      }
+    }
+
+    // NPC & Redeem Commands (+cnpc, +cget, +nrebirth, +nascend, +nsredeem/+nsr, +snsredeem/+snsr, +redeems)
+    if (isNpcCmd && npcModule && typeof npcModule.execute === 'function') {
+      const handledByNpc = await npcModule.execute({
+        command, args, message, client, userId, guildId, currentPrefix, user,
+        currentMs, callerHasBetaView, rarityIconsMap, getDisplayName, saveUsers, trackPeakPoints
+      });
+      if (handledByNpc) return;
+    }
+
     if (economyModule && typeof economyModule.execute === 'function') {
       const handledByEconomy = await economyModule.execute({
         command, args, message, client, userId, guildId, currentPrefix, user,
@@ -604,8 +708,6 @@ client.on('messageCreate', async message => {
       });
       if (handledByEconomy) return;
     }
-
-    const isAdmin = () => isOwner() || user.permissions === true;
 
     if (command === 'addtester') {
       if (!isOwner() && !user.permissions) return message.reply(toSmallCaps('❌ Only bot owners or admins can manage testers!'));
@@ -812,6 +914,9 @@ client.on('messageCreate', async message => {
           `• \`${currentPrefix}admingiveitem [@user] [item] [qty]\` — Grant items or dice\n` +
           `• \`${currentPrefix}adminsetnn [@user] [name]\` — Set custom user nickname\n` +
           `• \`${currentPrefix}adminclearlb\` — Clear leaderboard data\n` +
+          `• \`${currentPrefix}fnpcspawn\` (\`${currentPrefix}fns\`) [name] — Force spawn NPC\n` +
+          `• \`${currentPrefix}redeemgive [@user] [qty]\` — Give NPC Redeem\n` +
+          `• \`${currentPrefix}sredeemgive [@user] [qty]\` — Give Shiny NPC Redeem\n` +
           `• \`${currentPrefix}admingivepermission [@user]\` — Grant admin rights *(Owner only)*`
         ))
       );
