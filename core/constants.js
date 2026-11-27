@@ -1,4 +1,3 @@
-
 const BADGE_CATALOG = {
   // Obtainable Badges
   hacker: {
@@ -152,7 +151,11 @@ const BETA_EMOJIS = {
   CLAN_DESC: '<:Clandesc:1572806342736085052>',
   START_BTN: '<:Start:1572796405033214043>',
   CLAIM_BTN: '<:Claim:1572814245848940707>',
-  RANKS_POS: { 1: '<:1st:1572796499979403334>', 2: '<:2nd:1572796465355690104>', 3: '<:3rd:1572796434867159161>' },
+  RANKS_POS: {
+    1: '<:1st:1572796499979403334>',
+    2: '<:2nd:1572796465355690104>',
+    3: '<:3rd:1572796434867159161>'
+  },
   RARITIES: {
     C: '<:Pcommon:1573802564200300687>',
     U: '<:Puncommon:1573802607561015306>',
@@ -192,7 +195,13 @@ const RARITY_RATES = [
   { key: 'UGMR', label: 'UGMR', emoji: '<a:Pugmr:1573802950675923024>', normalPct: 0.015, shinyPct: 0.0001 }
 ];
 
-const CLAN_ROLE_HIERARCHY = { Leader: 4, 'Co-Leader': 3, Officer: 2, Deputy: 1, Member: 0 };
+const CLAN_ROLE_HIERARCHY = {
+  Leader: 4,
+  'Co-Leader': 3,
+  Officer: 2,
+  Deputy: 1,
+  Member: 0
+};
 
 const CLAN_LOGOS = {
   '1': '<a:Clanlogo1:1572057180704604261>',
@@ -265,7 +274,18 @@ const TRIVIA_BANK = [
 ];
 
 const SHINY_ICON = '<a:Shinynew:1572053794332872886>';
-const RARITY_HIERARCHY = { SSRP: 10, UGMR: 9, USRR: 8, STR: 7, UTR: 6, SRR: 5, SR: 4, R: 3, U: 2, C: 1 };
+const RARITY_HIERARCHY = {
+  SSRP: 10,
+  UGMR: 9,
+  USRR: 8,
+  STR: 7,
+  UTR: 6,
+  SRR: 5,
+  SR: 4,
+  R: 3,
+  U: 2,
+  C: 1
+};
 
 // PH Event ends on December 2, 2026 (23:59:59.999 local time)
 const PH_EVENT_END_MS = new Date(2026, 11, 2, 23, 59, 59, 999).getTime();
@@ -355,7 +375,7 @@ const ECONOMY_JOBS = [
 ];
 
 function isPhEventActive(nowMs = Date.now()) {
-  return nowMs <= PH_EVENT_END_MS;
+  return Number(nowMs) <= PH_EVENT_END_MS;
 }
 
 function getActiveEconomyJobs(nowMs = Date.now()) {
@@ -388,6 +408,8 @@ const ALL_VALID_COMMANDS = new Set([
   'prefixchange', 'enablec', 'disablec', 'meme', 'trivia',
   'work', 'working', 'workshift', 'balance', 'casino', 'blackjack', 'coinflip',
   'ticketuse', 'ticketbuy', 'lottery', 'csell',
+  'cnpc', 'cget', 'nrebirth', 'nascend', 'nsredeem', 'nsr', 'snsredeem', 'snsr',
+  'redeems', 'redeem', 'fnpcspawn', 'fns', 'redeemgive', 'sredeemgive',
   'ownercommands', 'admincommands', 'ownerbotmaintenance', 'ownersetstatus',
   'adminrestoreall', 'ownerresetdata', 'fixadmin', 'ownersecretpanel',
   'ownergivechibi', 'adminsetclanrewards', 'owneradminpermsrem', 'removeadminperms',
@@ -403,9 +425,25 @@ const TESTER_ONLY_COMMANDS = new Set([
 ]);
 
 module.exports = {
-  BADGE_CATALOG, BALANCE_ICON, BETA_EMOJIS, RARITY_ICONS, RARITY_RATES,
-  CLAN_ROLE_HIERARCHY, CLAN_LOGOS, EVENT_ICONS, EVENT_NPCS, EVENT_CHIBIS_POOL,
-  SEASON_LIST, TRIVIA_BANK, SHINY_ICON, RARITY_HIERARCHY,
-  PH_EVENT_END_MS, ECONOMY_JOBS, isPhEventActive, getActiveEconomyJobs, CSELL_RATES,
-  ALL_VALID_COMMANDS, TESTER_ONLY_COMMANDS
+  BADGE_CATALOG,
+  BALANCE_ICON,
+  BETA_EMOJIS,
+  RARITY_ICONS,
+  RARITY_RATES,
+  CLAN_ROLE_HIERARCHY,
+  CLAN_LOGOS,
+  EVENT_ICONS,
+  EVENT_NPCS,
+  EVENT_CHIBIS_POOL,
+  SEASON_LIST,
+  TRIVIA_BANK,
+  SHINY_ICON,
+  RARITY_HIERARCHY,
+  PH_EVENT_END_MS,
+  ECONOMY_JOBS,
+  isPhEventActive,
+  getActiveEconomyJobs,
+  CSELL_RATES,
+  ALL_VALID_COMMANDS,
+  TESTER_ONLY_COMMANDS
 };
