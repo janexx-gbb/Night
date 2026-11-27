@@ -5,10 +5,7 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ContainerBuilder,
-  TextDisplayBuilder,
-  MediaGalleryBuilder,
-  MediaGalleryItemBuilder,
+  EmbedBuilder,
   MessageFlags
 } = require('discord.js');
 const crypto = require('crypto');
@@ -90,6 +87,7 @@ const ALL_NPCS = [...NORMAL_NPCS, ...SHINY_NPCS];
 
 const NPC_COMMANDS = [
   'cnpc',
+  'npcinv',
   'cget',
   'nrebirth',
   'nascend',
@@ -188,9 +186,17 @@ function applyRebirthOrAscendLogic(npc) {
   return { ok: true, npc };
 }
 
+function reindexNpcIds(user) {
+  if (!user || !Array.isArray(user.npcs)) return;
+  user.npcs.forEach((npc, idx) => {
+    npc.slotId = idx + 1;
+  });
+}
+
 function ensureNpcUserFields(user) {
   if (!user || typeof user !== 'object') return;
   if (!Array.isArray(user.npcs)) user.npcs = [];
+  reindexNpcIds(user);
   if (typeof user.selectedNpcId !== 'string') user.selectedNpcId = null;
   if (typeof user.redeems !== 'number' || Number.isNaN(user.redeems)) user.redeems = 0;
   if (typeof user.shinyRedeems !== 'number' || Number.isNaN(user.shinyRedeems)) user.shinyRedeems = 0;
@@ -207,23 +213,19 @@ function getNpcArtworkUrl(entity) {
   return `https://cdn.discordapp.com/emojis/${match[2]}.${ext}?size=512`;
 }
 
-function appendBigNpcGallery(container, entity, description = null) {
+function applyBigNpcImage(embed, entity) {
   const url = getNpcArtworkUrl(entity);
-  if (!url || typeof MediaGalleryBuilder !== 'function' || typeof MediaGalleryItemBuilder !== 'function') {
-    return;
+  if (url) {
+    embed.setImage(url);
   }
-  const item = new MediaGalleryItemBuilder().setURL(url);
-  if (description && typeof item.setDescription === 'function') {
-    item.setDescription(String(description).slice(0, 1024));
-  }
-  const gallery = new MediaGalleryBuilder().addItems(item);
-  container.addMediaGalleryComponents(gallery);
+  return embed;
 }
 
-function createNpcInstance(template, level = 1, nowMs = Date.now()) {
+function createNpcInstance(template, level = 1, nowMs = Date.now(), slotId = 1) {
   const rolled = rollTierAndBaseStats();
   const isShiny = Boolean(template.shiny || template.isShiny);
   return {
+    slotId: Number(slotId || 1),
     uid: crypto.randomBytes(8).toString('hex'),
     npcId: template.id || template.npcId,
     name: template.name,
@@ -243,6 +245,18 @@ function createNpcInstance(template, level = 1, nowMs = Date.now()) {
     favorite: false,
     obtainedAt: nowMs
   };
+}
+
+function addNpcToUser(user, template, level = 1, nowMs = Date.now()) {
+  ensureNpcUserFields(user);
+  const nextSlot = user.npcs.length + 1;
+  const newNpc = createNpcInstance(template, level, nowMs, nextSlot);
+  user.npcs.push(newNpc);
+  reindexNpcIds(user);
+  if (!user.selectedNpcId) {
+    user.selectedNpcId = newNpc.uid;
+  }
+  return newNpc;
 }
 
 function formatObtainedDate(ms) {
@@ -277,7 +291,7 @@ function getActiveNpc(user) {
   return user.npcs[0];
 }
 
-function buildCnpcView(npc, currentPrefix) {
+function buildCnpcEmbedAndRow(npc, currentPrefix) {
   const stats = computeNpcStats(npc);
   const displayName = npc.nickname ? `${npc.name} (${npc.nickname})` : npc.name;
   const shinyBadge = npc.isShiny ? ` ${ICONS.shiny}` : '';
@@ -290,7 +304,7 @@ function buildCnpcView(npc, currentPrefix) {
     readyNotice = `\n\n⚡ **Your NPC Is ready for Rebirth/Ascending** — Use \`${currentPrefix}nrebirth\`!`;
   }
 
-  const content =
+  const description =
     toSmallCaps('Name: ') + `**${displayName}**${shinyBadge}\n` +
     toSmallCaps('Tier: ') + `**${npc.tier}**\n` +
     toSmallCaps('Level: ') + `**${npc.level}**\n` +
@@ -299,15 +313,15 @@ function buildCnpcView(npc, currentPrefix) {
     `⚔️ ` + toSmallCaps('Atk: ') + `**${stats.atk.toLocaleString()}**\n` +
     `🛡️ ` + toSmallCaps('Def: ') + `**${stats.def.toLocaleString()}**\n` +
     `⚡ ` + toSmallCaps('Spd: ') + `**${stats.spd.toLocaleString()}**\n\n` +
-    toSmallCaps('ID : ') + `\`${npc.uid}\`\n` +
+    toSmallCaps('ID : ') + `\`${npc.slotId}\` ` +
     toSmallCaps('First Obtain : ') + `**${formatObtainedDate(npc.obtainedAt)}**` +
     readyNotice;
 
-  const container = new ContainerBuilder()
-    .setAccentColor(npc.isShiny ? 0xf1c40f : 0x5865f2)
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(content));
+  const embed = new EmbedBuilder()
+    .setColor(npc.isShiny ? 0xf1c40f : 0x5865f2)
+    .setDescription(description);
 
-  appendBigNpcGallery(container, npc, displayName);
+  applyBigNpcImage(embed, npc);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -320,7 +334,50 @@ function buildCnpcView(npc, currentPrefix) {
       .setStyle(npc.favorite ? ButtonStyle.Success : ButtonStyle.Primary)
   );
 
-  return { container, row };
+  return { embed, row };
+}
+
+function buildNpcInventoryEmbedAndRow(user, page = 1, prefix = '+') {
+  ensureNpcUserFields(user);
+  const perPage = 10;
+  const totalPages = Math.max(1, Math.ceil(user.npcs.length / perPage));
+  const safePage = Math.max(1, Math.min(totalPages, Number(page || 1)));
+  const startIdx = (safePage - 1) * perPage;
+  const slice = user.npcs.slice(startIdx, startIdx + perPage);
+
+  const lines = slice.map(npc => {
+    const isActive = npc.uid === user.selectedNpcId ? ' ✅' : '';
+    const fav = npc.favorite ? ' ★' : '';
+    const shiny = npc.isShiny ? ` ${ICONS.shiny}` : '';
+    const nick = npc.nickname ? ` *(${npc.nickname})*` : '';
+    return `**\`${npc.slotId}\`** ${npc.icon} **${npc.name}**${nick}${shiny}${fav}${isActive} — ` +
+      toSmallCaps(`Lv.${npc.level} | Tier ${npc.tier}`);
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor(0x5865f2)
+    .setTitle(`🎒 ` + toSmallCaps('NPC Inventory'))
+    .setDescription(
+      lines.join('\n') +
+      `\n\n` +
+      toSmallCaps(`Use \`${prefix}cnpc <id>\` to select an NPC (e.g. \`${prefix}cnpc 1\`)`)
+    )
+    .setFooter({ text: `Page ${safePage}/${totalPages} • Total NPCs: ${user.npcs.length}` });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`npcinv_prev_${safePage}`)
+      .setLabel('◀ Prev')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safePage <= 1),
+    new ButtonBuilder()
+      .setCustomId(`npcinv_next_${safePage}`)
+      .setLabel('Next ▶')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(safePage >= totalPages)
+  );
+
+  return { embed, row };
 }
 
 function getChannelSpawnState(channelId) {
@@ -359,20 +416,14 @@ async function spawnNpcInChannel(channel, prefix = '+', forcedTemplate = null) {
   setChannelSpawnState(channel.id, spawnData);
   await saveUsers();
 
-  const content =
-    `# ` + toSmallCaps('A NPC Has Appeared') + `\n\n` +
-    toSmallCaps('Type ') + `\`${prefix}cget ${template.name}\` ` + toSmallCaps('to obtain this npc');
+  const embed = new EmbedBuilder()
+    .setColor(spawnData.isShiny ? 0xf39c12 : 0x2ecc71)
+    .setTitle(toSmallCaps('A NPC Has Appeared'))
+    .setDescription(toSmallCaps('Type ') + `\`${prefix}cget ${template.name}\` ` + toSmallCaps('to obtain this npc'));
 
-  const container = new ContainerBuilder()
-    .setAccentColor(spawnData.isShiny ? 0xf39c12 : 0x2ecc71)
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(content));
+  applyBigNpcImage(embed, spawnData);
 
-  appendBigNpcGallery(container, spawnData, template.name);
-
-  return channel.send({
-    components: [container],
-    flags: MessageFlags.IsComponentsV2
-  });
+  return channel.send({ embeds: [embed] });
 }
 
 function findNpcTemplateByName(query, pool = ALL_NPCS) {
@@ -427,31 +478,40 @@ async function processNpcChatOrBotActivity(message, user, currentPrefix = '+') {
     readyText = `\n\n⚡ **Your NPC Is ready for Rebirth/Ascending** (\`${currentPrefix}nrebirth\`)`;
   }
 
-  const levelMsg =
-    `🎉 ` + toSmallCaps('Congratulations Your ') + `**${npc.name}** ` +
-    toSmallCaps('is leveling up to ') + `**${npc.level}**` +
-    readyText;
+  const embed = new EmbedBuilder()
+    .setColor(0x9b59b6)
+    .setDescription(
+      `🎉 ` + toSmallCaps('Congratulations Your ') + `**${npc.name}** ` +
+      toSmallCaps('is leveling up to ') + `**${npc.level}**` +
+      readyText
+    );
 
-  const container = new ContainerBuilder()
-    .setAccentColor(0x9b59b6)
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(levelMsg));
+  applyBigNpcImage(embed, npc);
 
-  appendBigNpcGallery(container, npc, `${npc.name} Lv.${npc.level}`);
-
-  await message.channel.send({
-    components: [container],
-    flags: MessageFlags.IsComponentsV2
-  }).catch(() => {});
-
+  await message.channel.send({ embeds: [embed] }).catch(() => {});
   return true;
 }
 
-// Handle button & modal interactions for +cnpc
+// Handle button & modal interactions for +cnpc and +npcinv
 async function handleNpcInteraction(interaction) {
   if (!interaction.isButton() && !interaction.isModalSubmit()) return false;
 
   if (interaction.isButton()) {
     const id = interaction.customId;
+
+    if (id.startsWith('npcinv_prev_') || id.startsWith('npcinv_next_')) {
+      const isNext = id.startsWith('npcinv_next_');
+      const currentPage = Number.parseInt(id.replace(/^npcinv_(prev|next)_/, ''), 10) || 1;
+      ensureUser(interaction.user.id);
+      const user = db.users[interaction.user.id];
+      ensureNpcUserFields(user);
+
+      const guildPrefix = db.guildPrefixes?.[interaction.guildId] || db.config?.guildPrefixes?.[interaction.guildId] || '+';
+      const { embed, row } = buildNpcInventoryEmbedAndRow(user, isNext ? currentPage + 1 : currentPage - 1, guildPrefix);
+      await interaction.update({ embeds: [embed], components: [row] }).catch(() => {});
+      return true;
+    }
+
     if (id.startsWith('cnpc_fav_')) {
       const uid = id.replace('cnpc_fav_', '');
       ensureUser(interaction.user.id);
@@ -471,8 +531,8 @@ async function handleNpcInteraction(interaction) {
       await saveUsers();
 
       const guildPrefix = db.guildPrefixes?.[interaction.guildId] || db.config?.guildPrefixes?.[interaction.guildId] || '+';
-      const { container, row } = buildCnpcView(npc, guildPrefix);
-      await interaction.update({ components: [container, row], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
+      const { embed, row } = buildCnpcEmbedAndRow(npc, guildPrefix);
+      await interaction.update({ embeds: [embed], components: [row] }).catch(() => {});
       return true;
     }
 
@@ -528,12 +588,12 @@ async function handleNpcInteraction(interaction) {
     await saveUsers();
 
     const guildPrefix = db.guildPrefixes?.[interaction.guildId] || db.config?.guildPrefixes?.[interaction.guildId] || '+';
-    const { container, row } = buildCnpcView(npc, guildPrefix);
+    const { embed, row } = buildCnpcEmbedAndRow(npc, guildPrefix);
 
     if (interaction.isFromMessage()) {
-      await interaction.update({ components: [container, row], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
+      await interaction.update({ embeds: [embed], components: [row] }).catch(() => {});
     } else {
-      await interaction.reply({ components: [container, row], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
+      await interaction.reply({ embeds: [embed], components: [row] }).catch(() => {});
     }
     return true;
   }
@@ -551,12 +611,30 @@ async function execute({ command, args, message, userId, currentPrefix, user }) 
   ensureNpcUserFields(targetUser);
   const prefix = currentPrefix || '+';
 
-  // +cnpc — view current NPC of user (or select by index / UID)
+  // +npcinv [page] — list all owned NPCs with IDs 1, 2, 3...
+  if (normalizedCmd === 'npcinv') {
+    if (targetUser.npcs.length === 0) {
+      await message.reply(
+        toSmallCaps(`❌ Your NPC inventory is empty! Catch a spawned NPC using \`${prefix}cget <Npcname>\`.`)
+      );
+      return true;
+    }
+
+    const pageArg = Number.parseInt(args?.[0], 10) || 1;
+    const { embed, row } = buildNpcInventoryEmbedAndRow(targetUser, pageArg, prefix);
+    await message.reply({ embeds: [embed], components: [row] });
+    return true;
+  }
+
+  // +cnpc [id] — view current NPC or select by numeric ID (1, 2, 3...)
   if (normalizedCmd === 'cnpc') {
     if (args.length > 0) {
       const targetIndex = Number.parseInt(args[0], 10);
+      const bySlot = targetUser.npcs.find(n => Number(n.slotId) === targetIndex);
       const byUid = targetUser.npcs.find(n => n.uid === args[0]);
-      if (byUid) {
+      if (bySlot) {
+        targetUser.selectedNpcId = bySlot.uid;
+      } else if (byUid) {
         targetUser.selectedNpcId = byUid.uid;
       } else if (!Number.isNaN(targetIndex) && targetIndex >= 1 && targetIndex <= targetUser.npcs.length) {
         targetUser.selectedNpcId = targetUser.npcs[targetIndex - 1].uid;
@@ -572,8 +650,8 @@ async function execute({ command, args, message, userId, currentPrefix, user }) 
     }
 
     await saveUsers();
-    const { container, row } = buildCnpcView(activeNpc, prefix);
-    await message.reply({ components: [container, row], flags: MessageFlags.IsComponentsV2 });
+    const { embed, row } = buildCnpcEmbedAndRow(activeNpc, prefix);
+    await message.reply({ embeds: [embed], components: [row] });
     return true;
   }
 
@@ -599,10 +677,7 @@ async function execute({ command, args, message, userId, currentPrefix, user }) 
 
     const template = ALL_NPCS.find(n => n.id === spawn.npcId) || spawn;
     const catchLevel = rollCatchLevel1to90();
-    const newNpc = createNpcInstance(template, catchLevel, Date.now());
-
-    targetUser.npcs.push(newNpc);
-    if (!targetUser.selectedNpcId) targetUser.selectedNpcId = newNpc.uid;
+    const newNpc = addNpcToUser(targetUser, template, catchLevel, Date.now());
 
     clearChannelSpawnState(message.channel.id);
     await saveUsers();
@@ -610,20 +685,18 @@ async function execute({ command, args, message, userId, currentPrefix, user }) 
     const username = message.member?.displayName || message.author.username;
     const shinyTag = newNpc.isShiny ? ` ${ICONS.shiny}` : '';
 
-    const catchContainer = new ContainerBuilder()
-      .setAccentColor(newNpc.isShiny ? 0xf1c40f : 0x2ecc71)
-      .addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(
-          `🎉 ` +
-          toSmallCaps(`Congratulations ${username}, you obtained `) +
-          `**Level ${newNpc.level} ${newNpc.name}**${shinyTag} ` +
-          toSmallCaps(`(Tier: **${newNpc.tier}**)`)
-        )
+    const catchEmbed = new EmbedBuilder()
+      .setColor(newNpc.isShiny ? 0xf1c40f : 0x2ecc71)
+      .setDescription(
+        `🎉 ` +
+        toSmallCaps(`Congratulations ${username}, you obtained `) +
+        `**Level ${newNpc.level} ${newNpc.name}**${shinyTag} ` +
+        toSmallCaps(`(Tier: **${newNpc.tier}** • ID: **${newNpc.slotId}**)`)
       );
 
-    appendBigNpcGallery(catchContainer, newNpc, newNpc.name);
+    applyBigNpcImage(catchEmbed, newNpc);
 
-    await message.reply({ components: [catchContainer], flags: MessageFlags.IsComponentsV2 });
+    await message.reply({ embeds: [catchEmbed] });
     return true;
   }
 
@@ -663,37 +736,33 @@ async function execute({ command, args, message, userId, currentPrefix, user }) 
       ? `${ICONS.ascend} **ASCENDED TO ASCEND ${activeNpc.ascends}!**`
       : `${ICONS.rebirth} **REBIRTHED TO REBIRTH ${activeNpc.rebirths}/${MAX_REBIRTH}!**`;
 
-    const progressContainer = new ContainerBuilder()
-      .setAccentColor(promotedToAscend ? 0xf1c40f : 0x9b59b6)
-      .addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(
-          `${actionLabel}\n\n` +
-          `**${activeNpc.name}** ` +
-          toSmallCaps('has reset to Level 1 with permanent stat boosts!') +
-          `\n${buildRebirthAscendStarsLine(activeNpc)}`
-        )
+    const progressEmbed = new EmbedBuilder()
+      .setColor(promotedToAscend ? 0xf1c40f : 0x9b59b6)
+      .setDescription(
+        `${actionLabel}\n\n` +
+        `**${activeNpc.name}** ` +
+        toSmallCaps('has reset to Level 1 with permanent stat boosts!') +
+        `\n${buildRebirthAscendStarsLine(activeNpc)}`
       );
 
-    appendBigNpcGallery(progressContainer, activeNpc, activeNpc.name);
+    applyBigNpcImage(progressEmbed, activeNpc);
 
-    await message.reply({ components: [progressContainer], flags: MessageFlags.IsComponentsV2 });
+    await message.reply({ embeds: [progressEmbed] });
     return true;
   }
 
   // +redeems / +redeem — Check Redeem & Shiny Redeem balance
   if (normalizedCmd === 'redeems' || normalizedCmd === 'redeem') {
-    const redeemContainer = new ContainerBuilder()
-      .setAccentColor(0x5865f2)
-      .addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(
-          `# 🎟️ ` + toSmallCaps('Your NPC Redeems') + `\n\n` +
-          `${ICONS.redeem} ` + toSmallCaps('Normal Redeems: ') + `**${targetUser.redeems.toLocaleString()}**\n` +
-          `${ICONS.shinyRedeem} ` + toSmallCaps('Shiny Redeems: ') + `**${targetUser.shinyRedeems.toLocaleString()}**\n\n` +
-          toSmallCaps(`Use \`${prefix}nsredeem <Npcname>\` or \`${prefix}snsredeem <Npcname>\` to redeem an NPC!`)
-        )
+    const redeemEmbed = new EmbedBuilder()
+      .setColor(0x5865f2)
+      .setTitle(`🎟️ ` + toSmallCaps('Your NPC Redeems'))
+      .setDescription(
+        `${ICONS.redeem} ` + toSmallCaps('Normal Redeems: ') + `**${targetUser.redeems.toLocaleString()}**\n` +
+        `${ICONS.shinyRedeem} ` + toSmallCaps('Shiny Redeems: ') + `**${targetUser.shinyRedeems.toLocaleString()}**\n\n` +
+        toSmallCaps(`Use \`${prefix}nsredeem <Npcname>\` or \`${prefix}snsredeem <Npcname>\` to redeem an NPC!`)
       );
 
-    await message.reply({ components: [redeemContainer], flags: MessageFlags.IsComponentsV2 });
+    await message.reply({ embeds: [redeemEmbed] });
     return true;
   }
 
@@ -717,26 +786,21 @@ async function execute({ command, args, message, userId, currentPrefix, user }) 
     }
 
     targetUser.redeems -= 1;
-    const newNpc = createNpcInstance(template, 1, Date.now());
-    targetUser.npcs.push(newNpc);
-    if (!targetUser.selectedNpcId) targetUser.selectedNpcId = newNpc.uid;
-
+    const newNpc = addNpcToUser(targetUser, template, 1, Date.now());
     await saveUsers();
 
-    const container = new ContainerBuilder()
-      .setAccentColor(0x2ecc71)
-      .addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(
-          `${ICONS.redeem} ` +
-          toSmallCaps('Successfully redeemed ') +
-          `**${newNpc.name}** ` +
-          toSmallCaps(`(Tier: **${newNpc.tier}**, Level 1)!`)
-        )
+    const embed = new EmbedBuilder()
+      .setColor(0x2ecc71)
+      .setDescription(
+        `${ICONS.redeem} ` +
+        toSmallCaps('Successfully redeemed ') +
+        `**${newNpc.name}** ` +
+        toSmallCaps(`(Tier: **${newNpc.tier}**, Level 1 • ID: **${newNpc.slotId}**)!`)
       );
 
-    appendBigNpcGallery(container, newNpc, newNpc.name);
+    applyBigNpcImage(embed, newNpc);
 
-    await message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+    await message.reply({ embeds: [embed] });
     return true;
   }
 
@@ -760,26 +824,21 @@ async function execute({ command, args, message, userId, currentPrefix, user }) 
     }
 
     targetUser.shinyRedeems -= 1;
-    const newNpc = createNpcInstance(template, 1, Date.now());
-    targetUser.npcs.push(newNpc);
-    if (!targetUser.selectedNpcId) targetUser.selectedNpcId = newNpc.uid;
-
+    const newNpc = addNpcToUser(targetUser, template, 1, Date.now());
     await saveUsers();
 
-    const container = new ContainerBuilder()
-      .setAccentColor(0xf1c40f)
-      .addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(
-          `${ICONS.shinyRedeem} ` +
-          toSmallCaps('Successfully redeemed ') +
-          `**${newNpc.name}** ${ICONS.shiny} ` +
-          toSmallCaps(`(Tier: **${newNpc.tier}**, Level 1)!`)
-        )
+    const embed = new EmbedBuilder()
+      .setColor(0xf1c40f)
+      .setDescription(
+        `${ICONS.shinyRedeem} ` +
+        toSmallCaps('Successfully redeemed ') +
+        `**${newNpc.name}** ${ICONS.shiny} ` +
+        toSmallCaps(`(Tier: **${newNpc.tier}**, Level 1 • ID: **${newNpc.slotId}**)!`)
       );
 
-    appendBigNpcGallery(container, newNpc, newNpc.name);
+    applyBigNpcImage(embed, newNpc);
 
-    await message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+    await message.reply({ embeds: [embed] });
     return true;
   }
 
@@ -794,7 +853,9 @@ module.exports = {
   NPC_TIERS,
   ICONS,
   ensureNpcUserFields,
+  reindexNpcIds,
   createNpcInstance,
+  addNpcToUser,
   computeNpcStats,
   getActiveNpc,
   spawnNpcInChannel,
