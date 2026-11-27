@@ -11,8 +11,8 @@ const {
 } = require('discord.js');
 const crypto = require('crypto');
 
-const { db } = require('../core/database');
-const { toSmallCaps, saveUsers } = require('../core/helpers');
+const { db, saveUsers } = require('../core/database');
+const { toSmallCaps, ensureUser } = require('../core/helpers');
 
 const ICONS = {
   rebirth: '<a:Rebirth:1575788405076267079>',
@@ -164,7 +164,10 @@ function applyRebirthOrAscendLogic(npc) {
   npc.xp = 0;
 
   if (npc.ascends >= MAX_ASCEND) {
-    return { ok: false, reason: `Your NPC has already reached the maximum **Ascend ${MAX_ASCEND}** and cannot rebirth anymore!` };
+    return {
+      ok: false,
+      reason: `Your NPC has already reached the maximum **Ascend ${MAX_ASCEND}** and cannot rebirth anymore!`
+    };
   }
 
   npc.rebirths += 1;
@@ -184,6 +187,7 @@ function applyRebirthOrAscendLogic(npc) {
 }
 
 function ensureNpcUserFields(user) {
+  if (!user || typeof user !== 'object') return;
   if (!Array.isArray(user.npcs)) user.npcs = [];
   if (typeof user.selectedNpcId !== 'string') user.selectedNpcId = null;
   if (typeof user.redeems !== 'number' || Number.isNaN(user.redeems)) user.redeems = 0;
@@ -195,7 +199,7 @@ function createNpcInstance(template, level = 1, nowMs = Date.now()) {
   const isShiny = Boolean(template.shiny || template.isShiny);
   return {
     uid: crypto.randomBytes(8).toString('hex'),
-    npcId: template.id,
+    npcId: template.id || template.npcId,
     name: template.name,
     icon: template.icon,
     isShiny,
@@ -260,17 +264,17 @@ function buildCnpcView(npc, currentPrefix) {
   }
 
   const content =
-    toSmallCaps(`Name: `) + `**${displayName}**${shinyBadge}\n` +
-    toSmallCaps(`Tier: `) + `**${npc.tier}**\n` +
-    toSmallCaps(`Level: `) + `**${npc.level}**\n` +
+    toSmallCaps('Name: ') + `**${displayName}**${shinyBadge}\n` +
+    toSmallCaps('Tier: ') + `**${npc.tier}**\n` +
+    toSmallCaps('Level: ') + `**${npc.level}**\n` +
     `${starsLine}\n\n` +
-    `❤️ ` + toSmallCaps(`HP: `) + `**${stats.hp.toLocaleString()}**\n` +
-    `⚔️ ` + toSmallCaps(`Atk: `) + `**${stats.atk.toLocaleString()}**\n` +
-    `🛡️ ` + toSmallCaps(`Def: `) + `**${stats.def.toLocaleString()}**\n` +
-    `⚡ ` + toSmallCaps(`Spd: `) + `**${stats.spd.toLocaleString()}**\n\n` +
+    `❤️ ` + toSmallCaps('HP: ') + `**${stats.hp.toLocaleString()}**\n` +
+    `⚔️ ` + toSmallCaps('Atk: ') + `**${stats.atk.toLocaleString()}**\n` +
+    `🛡️ ` + toSmallCaps('Def: ') + `**${stats.def.toLocaleString()}**\n` +
+    `⚡ ` + toSmallCaps('Spd: ') + `**${stats.spd.toLocaleString()}**\n\n` +
     `${npc.icon}\n\n` +
-    toSmallCaps(`ID : `) + `\`${npc.uid}\`\n` +
-    toSmallCaps(`First Obtain : `) + `**${formatObtainedDate(npc.obtainedAt)}**` +
+    toSmallCaps('ID : ') + `\`${npc.uid}\`\n` +
+    toSmallCaps('First Obtain : ') + `**${formatObtainedDate(npc.obtainedAt)}**` +
     readyNotice;
 
   const container = new ContainerBuilder()
@@ -327,8 +331,8 @@ async function spawnNpcInChannel(channel, prefix = '+', forcedTemplate = null) {
   await saveUsers();
 
   const content =
-    `# ` + toSmallCaps(`A NPC Has Appeared`) + `\n\n` +
-    toSmallCaps(`Type `) + `\`${prefix}cget ${template.name}\` ` + toSmallCaps(`to obtain this npc`) + `\n\n` +
+    `# ` + toSmallCaps('A NPC Has Appeared') + `\n\n` +
+    toSmallCaps('Type ') + `\`${prefix}cget ${template.name}\` ` + toSmallCaps('to obtain this npc') + `\n\n` +
     `${template.icon}`;
 
   const container = new ContainerBuilder()
@@ -341,12 +345,12 @@ async function spawnNpcInChannel(channel, prefix = '+', forcedTemplate = null) {
   });
 }
 
-function findNpcTemplateByName(query) {
+function findNpcTemplateByName(query, pool = ALL_NPCS) {
   if (!query) return null;
   const q = String(query).trim().toLowerCase();
   return (
-    ALL_NPCS.find(n => n.name.toLowerCase() === q || n.id === q) ||
-    ALL_NPCS.find(n => n.name.toLowerCase().includes(q)) ||
+    pool.find(n => n.name.toLowerCase() === q || n.id.toLowerCase() === q) ||
+    pool.find(n => n.name.toLowerCase().includes(q)) ||
     null
   );
 }
@@ -367,13 +371,14 @@ async function processNpcChatOrBotActivity(message, user, currentPrefix = '+') {
   }
 
   npc.xp = Number(npc.xp || 0) + xpGain;
-  const requiredXp = 100 + (npc.level - 1) * 25;
+  let requiredXp = 100 + (npc.level - 1) * 25;
   let leveledUp = false;
 
   while (npc.xp >= requiredXp && npc.level < MAX_LEVEL) {
     npc.xp -= requiredXp;
     npc.level += 1;
     leveledUp = true;
+    requiredXp = 100 + (npc.level - 1) * 25;
   }
 
   if (npc.level >= MAX_LEVEL) {
@@ -393,8 +398,8 @@ async function processNpcChatOrBotActivity(message, user, currentPrefix = '+') {
   }
 
   const levelMsg =
-    `🎉 ` + toSmallCaps(`Congratulations Your `) + `**${npc.name}** ` +
-    toSmallCaps(`is leveling up to `) + `**${npc.level}**\n\n` +
+    `🎉 ` + toSmallCaps('Congratulations Your ') + `**${npc.name}** ` +
+    toSmallCaps('is leveling up to ') + `**${npc.level}**\n\n` +
     `${npc.icon}` +
     readyText;
 
@@ -418,27 +423,43 @@ async function handleNpcInteraction(interaction) {
     const id = interaction.customId;
     if (id.startsWith('cnpc_fav_')) {
       const uid = id.replace('cnpc_fav_', '');
-      const user = db.users?.[interaction.user.id];
-      if (!user) return true;
+      ensureUser(interaction.user.id);
+      const user = db.users[interaction.user.id];
       ensureNpcUserFields(user);
 
       const npc = user.npcs.find(n => n.uid === uid);
       if (!npc) {
-        await interaction.reply({ content: toSmallCaps('❌ NPC not found in your collection.'), ephemeral: true });
+        await interaction.reply({
+          content: toSmallCaps('❌ NPC not found in your collection.'),
+          flags: MessageFlags.Ephemeral
+        }).catch(() => {});
         return true;
       }
 
       npc.favorite = !npc.favorite;
       await saveUsers();
 
-      const guildPrefix = db.config?.guildPrefixes?.[interaction.guildId] || '+';
+      const guildPrefix = db.guildPrefixes?.[interaction.guildId] || db.config?.guildPrefixes?.[interaction.guildId] || '+';
       const { container, row } = buildCnpcView(npc, guildPrefix);
-      await interaction.update({ components: [container, row], flags: MessageFlags.IsComponentsV2 });
+      await interaction.update({ components: [container, row], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
       return true;
     }
 
     if (id.startsWith('cnpc_nick_')) {
       const uid = id.replace('cnpc_nick_', '');
+      ensureUser(interaction.user.id);
+      const user = db.users[interaction.user.id];
+      ensureNpcUserFields(user);
+
+      const npc = user.npcs.find(n => n.uid === uid);
+      if (!npc) {
+        await interaction.reply({
+          content: toSmallCaps('❌ NPC not found in your collection.'),
+          flags: MessageFlags.Ephemeral
+        }).catch(() => {});
+        return true;
+      }
+
       const modal = new ModalBuilder()
         .setCustomId(`cnpc_nick_modal_${uid}`)
         .setTitle('Set NPC Nickname');
@@ -451,20 +472,23 @@ async function handleNpcInteraction(interaction) {
         .setRequired(false);
 
       modal.addComponents(new ActionRowBuilder().addComponents(input));
-      await interaction.showModal(modal);
+      await interaction.showModal(modal).catch(() => {});
       return true;
     }
   }
 
   if (interaction.isModalSubmit() && interaction.customId.startsWith('cnpc_nick_modal_')) {
     const uid = interaction.customId.replace('cnpc_nick_modal_', '');
-    const user = db.users?.[interaction.user.id];
-    if (!user) return true;
+    ensureUser(interaction.user.id);
+    const user = db.users[interaction.user.id];
     ensureNpcUserFields(user);
 
     const npc = user.npcs.find(n => n.uid === uid);
     if (!npc) {
-      await interaction.reply({ content: toSmallCaps('❌ NPC not found.'), ephemeral: true });
+      await interaction.reply({
+        content: toSmallCaps('❌ NPC not found.'),
+        flags: MessageFlags.Ephemeral
+      }).catch(() => {});
       return true;
     }
 
@@ -472,9 +496,14 @@ async function handleNpcInteraction(interaction) {
     npc.nickname = rawNick.length > 0 ? rawNick : null;
     await saveUsers();
 
-    const guildPrefix = db.config?.guildPrefixes?.[interaction.guildId] || '+';
+    const guildPrefix = db.guildPrefixes?.[interaction.guildId] || db.config?.guildPrefixes?.[interaction.guildId] || '+';
     const { container, row } = buildCnpcView(npc, guildPrefix);
-    await interaction.update({ components: [container, row], flags: MessageFlags.IsComponentsV2 });
+
+    if (interaction.isFromMessage()) {
+      await interaction.update({ components: [container, row], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
+    } else {
+      await interaction.reply({ components: [container, row], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
+    }
     return true;
   }
 
@@ -482,180 +511,239 @@ async function handleNpcInteraction(interaction) {
 }
 
 async function execute({ command, args, message, userId, currentPrefix, user }) {
-  if (!NPC_COMMANDS.includes(command)) return false;
+  const normalizedCmd = String(command || '').toLowerCase();
+  if (!NPC_COMMANDS.includes(normalizedCmd)) return false;
 
-  ensureNpcUserFields(user);
+  const uid = userId || message.author.id;
+  ensureUser(uid);
+  const targetUser = user || db.users[uid];
+  ensureNpcUserFields(targetUser);
   const prefix = currentPrefix || '+';
 
-  // +cnpc — view current NPC of user
-  if (command === 'cnpc') {
+  // +cnpc — view current NPC of user (or select by index / UID)
+  if (normalizedCmd === 'cnpc') {
     if (args.length > 0) {
       const targetIndex = Number.parseInt(args[0], 10);
-      const byUid = user.npcs.find(n => n.uid === args[0]);
+      const byUid = targetUser.npcs.find(n => n.uid === args[0]);
       if (byUid) {
-        user.selectedNpcId = byUid.uid;
-      } else if (!Number.isNaN(targetIndex) && targetIndex >= 1 && targetIndex <= user.npcs.length) {
-        user.selectedNpcId = user.npcs[targetIndex - 1].uid;
+        targetUser.selectedNpcId = byUid.uid;
+      } else if (!Number.isNaN(targetIndex) && targetIndex >= 1 && targetIndex <= targetUser.npcs.length) {
+        targetUser.selectedNpcId = targetUser.npcs[targetIndex - 1].uid;
       }
     }
 
-    const activeNpc = getActiveNpc(user);
+    const activeNpc = getActiveNpc(targetUser);
     if (!activeNpc) {
-      return message.reply(toSmallCaps(`❌ You don't have any NPCs yet! Catch a spawned NPC using \`${prefix}cget <Npcname>\`.`));
+      await message.reply(
+        toSmallCaps(`❌ You don't have any NPCs yet! Catch a spawned NPC using \`${prefix}cget <Npcname>\`.`)
+      );
+      return true;
     }
 
     await saveUsers();
     const { container, row } = buildCnpcView(activeNpc, prefix);
-    return message.reply({ components: [container, row], flags: MessageFlags.IsComponentsV2 });
+    await message.reply({ components: [container, row], flags: MessageFlags.IsComponentsV2 });
+    return true;
   }
 
   // +cget <Npcname> — catch appeared NPC
-  if (command === 'cget') {
+  if (normalizedCmd === 'cget') {
     const spawn = getChannelSpawnState(message.channel.id);
     if (!spawn) {
-      return message.reply(toSmallCaps(`❌ There is no NPC spawned in this channel right now.`));
+      await message.reply(toSmallCaps('❌ There is no NPC spawned in this channel right now.'));
+      return true;
     }
 
     const guess = args.join(' ').trim().toLowerCase();
     if (!guess) {
-      return message.reply(toSmallCaps(`❌ Usage: \`${prefix}cget <Npcname>\``));
+      await message.reply(toSmallCaps(`❌ Usage: \`${prefix}cget <Npcname>\``));
+      return true;
     }
 
-    const targetNameLower = spawn.name.toLowerCase();
+    const targetNameLower = String(spawn.name || '').toLowerCase();
     if (guess !== targetNameLower && !targetNameLower.includes(guess)) {
-      return message.reply(toSmallCaps(`❌ Wrong NPC name! Try again with \`${prefix}cget <Npcname>\`.`));
+      await message.reply(toSmallCaps(`❌ Wrong NPC name! Try again with \`${prefix}cget <Npcname>\`.`));
+      return true;
     }
 
     const template = ALL_NPCS.find(n => n.id === spawn.npcId) || spawn;
     const catchLevel = rollCatchLevel1to90();
     const newNpc = createNpcInstance(template, catchLevel, Date.now());
 
-    user.npcs.push(newNpc);
-    if (!user.selectedNpcId) user.selectedNpcId = newNpc.uid;
+    targetUser.npcs.push(newNpc);
+    if (!targetUser.selectedNpcId) targetUser.selectedNpcId = newNpc.uid;
 
     clearChannelSpawnState(message.channel.id);
     await saveUsers();
 
     const username = message.member?.displayName || message.author.username;
-    return message.reply(
-      toSmallCaps(`Congratulations `) +
-      `**@${username}** ` +
-      toSmallCaps(`You caught `) +
-      `**${newNpc.name}** ` +
-      toSmallCaps(`[${newNpc.level}] check your `) +
-      `\`${prefix}cnpc\` ` +
-      toSmallCaps(`to see your npc`)
-    );
-  }
+    const shinyTag = newNpc.isShiny ? ` ${ICONS.shiny}` : '';
 
-  // +nrebirth — rebirth active NPC (requires level 100; max 5 rebirths -> Ascend 1)
-  if (command === 'nrebirth') {
-    const npc = getActiveNpc(user);
-    if (!npc) {
-      return message.reply(toSmallCaps(`❌ You don't have an active NPC.`));
-    }
-    if (npc.level < MAX_LEVEL) {
-      return message.reply(toSmallCaps(`❌ **${npc.name}** must reach **Level ${MAX_LEVEL}** to Rebirth (Current: **Level ${npc.level}**).`));
-    }
+    const catchContainer = new ContainerBuilder()
+      .setAccentColor(newNpc.isShiny ? 0xf1c40f : 0x2ecc71)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          `🎉 ` +
+          toSmallCaps(`Congratulations ${username}, you obtained `) +
+          `**Level ${newNpc.level} ${newNpc.name}**${shinyTag} ` +
+          toSmallCaps(`(Tier: **${newNpc.tier}**)`) +
+          `\n\n${newNpc.icon}`
+        )
+      );
 
-    const res = applyRebirthOrAscendLogic(npc);
-    if (!res.ok) {
-      return message.reply(toSmallCaps(`❌ ${res.reason}`));
-    }
-
-    await saveUsers();
-    const stars = buildRebirthAscendStarsLine(npc);
-    return message.reply(
-      toSmallCaps(`✨ **${npc.name}** Rebirth/Ascend updated! `) +
-      `${stars} ` +
-      toSmallCaps(`(Rebirths: **${npc.rebirths}/${MAX_REBIRTH}**, Ascends: **${npc.ascends}/${MAX_ASCEND}**, Level: **${npc.level}**)`)
-    );
-  }
-
-  // +nascend — ascend active NPC (requires 5 rebirths / max level)
-  if (command === 'nascend') {
-    const npc = getActiveNpc(user);
-    if (!npc) {
-      return message.reply(toSmallCaps(`❌ You don't have an active NPC.`));
-    }
-    if (npc.ascends >= MAX_ASCEND) {
-      return message.reply(toSmallCaps(`❌ **${npc.name}** has already reached maximum **Ascend ${MAX_ASCEND}**!`));
-    }
-    if (npc.rebirths < MAX_REBIRTH && npc.level < MAX_LEVEL) {
-      return message.reply(toSmallCaps(`❌ **${npc.name}** requires **5 Rebirths** (or **Level ${MAX_LEVEL}** at Rebirth 5) to Ascend.`));
-    }
-
-    if (npc.rebirths >= MAX_REBIRTH) {
-      npc.ascends += 1;
-      npc.rebirths = 0;
-      npc.level = 1;
-      npc.xp = 0;
-    } else {
-      const res = applyRebirthOrAscendLogic(npc);
-      if (!res.ok) return message.reply(toSmallCaps(`❌ ${res.reason}`));
-    }
-
-    await saveUsers();
-    const stars = buildRebirthAscendStarsLine(npc);
-    return message.reply(
-      toSmallCaps(`🌟 **${npc.name}** Ascended! `) +
-      `${stars} ` +
-      toSmallCaps(`(Ascends: **${npc.ascends}/${MAX_ASCEND}**, Rebirths: **${npc.rebirths}/${MAX_REBIRTH}**)`)
-    );
-  }
-
-  // Check redeem counts when running +redeem or +redeems with no args
-  if ((command === 'redeem' || command === 'redeems') && args.length === 0) {
-    const content =
-      `${ICONS.redeem} - **${user.redeems.toLocaleString()}**\n` +
-      `${ICONS.shinyRedeem} - **${user.shinyRedeems.toLocaleString()}**`;
-    const container = new ContainerBuilder()
-      .setAccentColor(0x3498db)
-      .addTextDisplayComponents(new TextDisplayBuilder().setContent(content));
-    return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
-  }
-
-  // +nsredeem or +nsr <NPC name> — normal NPC redeem spawn
-  if (command === 'nsredeem' || command === 'nsr') {
-    if (user.redeems < 1) {
-      return message.reply(toSmallCaps(`❌ You don't have any ${ICONS.redeem} Redeems!`));
-    }
-    const query = args.join(' ').trim();
-    if (!query) {
-      return message.reply(toSmallCaps(`❌ Usage: \`${prefix}${command} <NPC name>\``));
-    }
-    const template = NORMAL_NPCS.find(n =>
-      n.name.toLowerCase() === query.toLowerCase() || n.name.toLowerCase().includes(query.toLowerCase())
-    );
-    if (!template) {
-      return message.reply(toSmallCaps(`❌ Normal NPC not found matching "${query}".`));
-    }
-
-    user.redeems -= 1;
-    await saveUsers();
-    await spawnNpcInChannel(message.channel, prefix, template);
+    await message.reply({ components: [catchContainer], flags: MessageFlags.IsComponentsV2 });
     return true;
   }
 
-  // +snsredeem or +snsr <Shiny NPC Names> — shiny NPC redeem spawn
-  if (command === 'snsredeem' || command === 'snsr') {
-    if (user.shinyRedeems < 1) {
-      return message.reply(toSmallCaps(`❌ You don't have any ${ICONS.shinyRedeem} Shiny Redeems!`));
-    }
-    const query = args.join(' ').trim();
-    if (!query) {
-      return message.reply(toSmallCaps(`❌ Usage: \`${prefix}${command} <Shiny NPC name>\``));
-    }
-    const template = SHINY_NPCS.find(n =>
-      n.name.toLowerCase() === query.toLowerCase() || n.name.toLowerCase().includes(query.toLowerCase())
-    );
-    if (!template) {
-      return message.reply(toSmallCaps(`❌ Shiny NPC not found matching "${query}".`));
+  // +nrebirth & +nascend — Rebirth / Ascend active Level 100 NPC
+  if (normalizedCmd === 'nrebirth' || normalizedCmd === 'nascend') {
+    const activeNpc = getActiveNpc(targetUser);
+    if (!activeNpc) {
+      await message.reply(toSmallCaps('❌ You do not have an active NPC!'));
+      return true;
     }
 
-    user.shinyRedeems -= 1;
+    if (activeNpc.level < MAX_LEVEL) {
+      await message.reply(
+        toSmallCaps(`❌ Your **${activeNpc.name}** must reach **Level ${MAX_LEVEL}** before using \`${prefix}${normalizedCmd}\`! (Current: Level ${activeNpc.level})`)
+      );
+      return true;
+    }
+
+    if (normalizedCmd === 'nascend' && activeNpc.rebirths < MAX_REBIRTH) {
+      await message.reply(
+        toSmallCaps(`❌ Your **${activeNpc.name}** needs **${MAX_REBIRTH} Rebirths** before ascending! (Current: ${activeNpc.rebirths}/${MAX_REBIRTH})`)
+      );
+      return true;
+    }
+
+    const prevAscends = Number(activeNpc.ascends || 0);
+    const result = applyRebirthOrAscendLogic(activeNpc);
+    if (!result.ok) {
+      await message.reply(toSmallCaps(`❌ ${result.reason}`));
+      return true;
+    }
+
     await saveUsers();
-    await spawnNpcInChannel(message.channel, prefix, template);
+
+    const promotedToAscend = activeNpc.ascends > prevAscends;
+    const actionLabel = promotedToAscend
+      ? `${ICONS.ascend} **ASCENDED TO ASCEND ${activeNpc.ascends}!**`
+      : `${ICONS.rebirth} **REBIRTHED TO REBIRTH ${activeNpc.rebirths}/${MAX_REBIRTH}!**`;
+
+    const progressContainer = new ContainerBuilder()
+      .setAccentColor(promotedToAscend ? 0xf1c40f : 0x9b59b6)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          `${actionLabel}\n\n` +
+          `${activeNpc.icon} **${activeNpc.name}** ` +
+          toSmallCaps('has reset to Level 1 with permanent stat boosts!') +
+          `\n${buildRebirthAscendStarsLine(activeNpc)}`
+        )
+      );
+
+    await message.reply({ components: [progressContainer], flags: MessageFlags.IsComponentsV2 });
+    return true;
+  }
+
+  // +redeems / +redeem — Check Redeem & Shiny Redeem balance
+  if (normalizedCmd === 'redeems' || normalizedCmd === 'redeem') {
+    const redeemContainer = new ContainerBuilder()
+      .setAccentColor(0x5865f2)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          `# 🎟️ ` + toSmallCaps('Your NPC Redeems') + `\n\n` +
+          `${ICONS.redeem} ` + toSmallCaps('Normal Redeems: ') + `**${targetUser.redeems.toLocaleString()}**\n` +
+          `${ICONS.shinyRedeem} ` + toSmallCaps('Shiny Redeems: ') + `**${targetUser.shinyRedeems.toLocaleString()}**\n\n` +
+          toSmallCaps(`Use \`${prefix}nsredeem <Npcname>\` or \`${prefix}snsredeem <Npcname>\` to redeem an NPC!`)
+        )
+      );
+
+    await message.reply({ components: [redeemContainer], flags: MessageFlags.IsComponentsV2 });
+    return true;
+  }
+
+  // +nsredeem / +nsr <Npcname> — Redeem a Normal NPC
+  if (normalizedCmd === 'nsredeem' || normalizedCmd === 'nsr') {
+    if (targetUser.redeems < 1) {
+      await message.reply(toSmallCaps(`❌ You don't have any Normal Redeems ${ICONS.redeem}!`));
+      return true;
+    }
+
+    const query = args.join(' ').trim();
+    if (!query) {
+      await message.reply(toSmallCaps(`❌ Usage: \`${prefix}nsredeem <Npcname>\``));
+      return true;
+    }
+
+    const template = findNpcTemplateByName(query, NORMAL_NPCS);
+    if (!template) {
+      await message.reply(toSmallCaps(`❌ Normal NPC **${query}** not found!`));
+      return true;
+    }
+
+    targetUser.redeems -= 1;
+    const newNpc = createNpcInstance(template, 1, Date.now());
+    targetUser.npcs.push(newNpc);
+    if (!targetUser.selectedNpcId) targetUser.selectedNpcId = newNpc.uid;
+
+    await saveUsers();
+
+    const container = new ContainerBuilder()
+      .setAccentColor(0x2ecc71)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          `${ICONS.redeem} ` +
+          toSmallCaps('Successfully redeemed ') +
+          `**${newNpc.name}** ` +
+          toSmallCaps(`(Tier: **${newNpc.tier}**, Level 1)!`) +
+          `\n\n${newNpc.icon}`
+        )
+      );
+
+    await message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+    return true;
+  }
+
+  // +snsredeem / +snsr <Npcname> — Redeem a Shiny NPC
+  if (normalizedCmd === 'snsredeem' || normalizedCmd === 'snsr') {
+    if (targetUser.shinyRedeems < 1) {
+      await message.reply(toSmallCaps(`❌ You don't have any Shiny Redeems ${ICONS.shinyRedeem}!`));
+      return true;
+    }
+
+    const query = args.join(' ').trim();
+    if (!query) {
+      await message.reply(toSmallCaps(`❌ Usage: \`${prefix}snsredeem <Npcname>\``));
+      return true;
+    }
+
+    const template = findNpcTemplateByName(query, SHINY_NPCS);
+    if (!template) {
+      await message.reply(toSmallCaps(`❌ Shiny NPC **${query}** not found! (Try e.g. \`Shiny Naruto\`)`));
+      return true;
+    }
+
+    targetUser.shinyRedeems -= 1;
+    const newNpc = createNpcInstance(template, 1, Date.now());
+    targetUser.npcs.push(newNpc);
+    if (!targetUser.selectedNpcId) targetUser.selectedNpcId = newNpc.uid;
+
+    await saveUsers();
+
+    const container = new ContainerBuilder()
+      .setAccentColor(0xf1c40f)
+      .addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          `${ICONS.shinyRedeem} ` +
+          toSmallCaps('Successfully redeemed ') +
+          `**${newNpc.name}** ${ICONS.shiny} ` +
+          toSmallCaps(`(Tier: **${newNpc.tier}**, Level 1)!`) +
+          `\n\n${newNpc.icon}`
+        )
+      );
+
+    await message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
     return true;
   }
 
@@ -664,14 +752,18 @@ async function execute({ command, args, message, userId, currentPrefix, user }) 
 
 module.exports = {
   commands: NPC_COMMANDS,
-  execute,
-  handleNpcInteraction,
-  processNpcChatOrBotActivity,
-  spawnNpcInChannel,
-  findNpcTemplateByName,
-  ensureNpcUserFields,
-  ALL_NPCS,
   NORMAL_NPCS,
   SHINY_NPCS,
-  ICONS
+  ALL_NPCS,
+  NPC_TIERS,
+  ICONS,
+  ensureNpcUserFields,
+  createNpcInstance,
+  computeNpcStats,
+  getActiveNpc,
+  spawnNpcInChannel,
+  findNpcTemplateByName,
+  processNpcChatOrBotActivity,
+  handleNpcInteraction,
+  execute
 };
