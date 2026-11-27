@@ -1,6 +1,6 @@
 const { PermissionsBitField } = require('discord.js');
 const { BADGE_CATALOG, BETA_EMOJIS, CLAN_LOGOS } = require('./constants');
-const { gameData, db, saveUsers } = require('./database');
+const { gameData, db } = require('./database');
 
 const SHOP_DICE_MAP = {
   zenith: { id: 'zenith', name: 'Zenith Dice', emoji: '<:Zenithdice:1573808579042087044>', cost: 1_000_000, luckPercent: 1_000, restriction: 'cash' },
@@ -55,7 +55,11 @@ function formatCompactValue(num) {
   for (const unit of COMPACT_UNITS) {
     if (abs >= unit.value) {
       const scaled = abs / unit.value;
-      const formatted = scaled >= 100 ? scaled.toFixed(0) : scaled >= 10 ? scaled.toFixed(1).replace(/\.0$/, '') : scaled.toFixed(2).replace(/\.?0+$/, '');
+      const formatted = scaled >= 100
+        ? scaled.toFixed(0)
+        : scaled >= 10
+          ? scaled.toFixed(1).replace(/\.0$/, '')
+          : scaled.toFixed(2).replace(/\.?0+$/, '');
       return `${sign}${formatted}${unit.suffix}`;
     }
   }
@@ -67,7 +71,7 @@ function formatCompactNumber(num) {
 }
 
 function isTester(userId) {
-  if (!db?.config) return false;
+  if (!userId || !db?.config) return false;
   if (!db.config.ownerId) db.config.ownerId = userId;
   return userId === db.config.ownerId || (Array.isArray(db.config.testers) && db.config.testers.includes(userId));
 }
@@ -86,7 +90,7 @@ function toSmallCaps(str) {
     K: 'ᴋ', L: 'ʟ', M: 'ᴍ', N: 'ɴ', O: 'ᴏ', P: 'ᴘ', Q: 'ǫ', R: 'ʀ', S: 'ꜱ', T: 'ᴛ',
     U: 'ᴜ', V: 'ᴠ', W: 'ᴡ', X: 'x', Y: 'ʏ', Z: 'ᴢ'
   };
-  return str.split(/(<a?:\w+:\d+>)/g).map(part =>
+  return String(str).split(/(<a?:\w+:\d+>)/g).map(part =>
     (part.startsWith('<') && part.endsWith('>')) ? part : part.split('').map(ch => map[ch] || ch).join('')
   ).join('');
 }
@@ -100,7 +104,10 @@ function getRarityIconMap(useBetaEmojis = false) {
     UGMR: '<:What:1573806040644980917>'
   };
   (gameData.rarities || []).forEach(r => {
-    if (!map[r.key]) map[r.key] = (useBetaEmojis && BETA_EMOJIS?.RARITIES?.[r.key]) ? BETA_EMOJIS.RARITIES[r.key] : r.emoji;
+    if (!r || !r.key) return;
+    if (!map[r.key]) {
+      map[r.key] = (useBetaEmojis && BETA_EMOJIS?.RARITIES?.[r.key]) ? BETA_EMOJIS.RARITIES[r.key] : r.emoji;
+    }
   });
   return map;
 }
@@ -118,18 +125,27 @@ function getActiveWeatherEvent() {
 }
 
 function rollWeatherEvent(nowMs = Date.now()) {
-  const pool = Array.isArray(gameData.weatherEvents) && gameData.weatherEvents.length > 0 ? gameData.weatherEvents : WEATHER_EVENT_POOL;
+  const pool = Array.isArray(gameData.weatherEvents) && gameData.weatherEvents.length > 0
+    ? gameData.weatherEvents
+    : WEATHER_EVENT_POOL;
+  const intervalMin = Number(gameData?.settings?.weatherIntervalMinutes) || 30;
+  const intervalMs = Math.max(1, intervalMin) * 60 * 1000;
+
   const rollVal = Math.random() * 100;
   let cumulative = 0;
   let selected = null;
   for (const ev of pool) {
+    if (!ev) continue;
     cumulative += Number(ev.chancePercent) || 0;
-    if (rollVal <= cumulative) { selected = ev; break; }
+    if (rollVal <= cumulative) {
+      selected = ev;
+      break;
+    }
   }
   if (!db.weather || typeof db.weather !== 'object') db.weather = {};
   db.weather.current = selected ? { ...selected } : null;
   db.weather.updatedAt = nowMs;
-  db.weather.nextUpdateAt = nowMs + 30 * 60 * 1000;
+  db.weather.nextUpdateAt = nowMs + intervalMs;
   return db.weather.current;
 }
 
@@ -140,7 +156,14 @@ function getUserRollLuckPercent(user) {
   const weatherBonusPct = activeWeather ? (Number(activeWeather.luckBonusPercent) || 0) : 0;
   const weatherBonusLuck = baseDiceLuck * (weatherBonusPct / 100);
   const totalLuckPercent = baseDiceLuck + weatherBonusLuck;
-  return { diceInfo, baseDiceLuck, activeWeather, weatherBonusLuck, totalLuckPercent, luckMultiplier: 1 + totalLuckPercent / 100 };
+  return {
+    diceInfo,
+    baseDiceLuck,
+    activeWeather,
+    weatherBonusLuck,
+    totalLuckPercent,
+    luckMultiplier: 1 + totalLuckPercent / 100
+  };
 }
 
 function resolveRankByPoints(pts) {
@@ -157,29 +180,62 @@ function resolveRankByPoints(pts) {
   return '<:Unranked:1573804757322178772>';
 }
 
-function updateUserRank(user) { user.rank = resolveRankByPoints(user.points || 0); }
-function updatePeakRank(user) { user.highestSeasonRank = resolveRankByPoints(user.highestSeasonPoints || 0); }
+function updateUserRank(user) {
+  if (!user || typeof user !== 'object') return;
+  user.rank = resolveRankByPoints(user.points || 0);
+}
+
+function updatePeakRank(user) {
+  if (!user || typeof user !== 'object') return;
+  user.highestSeasonRank = resolveRankByPoints(user.highestSeasonPoints || 0);
+}
 
 async function evaluateAndSyncUserBadges(targetUserId, targetUserData, guild = null) {
-  const badgeSet = new Set(Array.isArray(targetUserData.badges) ? targetUserData.badges.filter(k => Boolean(BADGE_CATALOG?.[k])) : []);
+  if (!targetUserData || typeof targetUserData !== 'object') return [];
+  const badgeSet = new Set(
+    Array.isArray(targetUserData.badges)
+      ? targetUserData.badges.filter(k => Boolean(BADGE_CATALOG?.[k]))
+      : []
+  );
+
   const level = Number(targetUserData.userLevel) || 1;
   if (level >= 50) badgeSet.add('lvl50');
   if (level >= 100) badgeSet.add('lvl100');
 
   const nowDate = new Date();
   const firstPlayedMs = Number(targetUserData.firstPlayedAt) || Date.parse(targetUserData.joinedDate || '') || nowDate.getTime();
-  if (Math.floor(Math.max(0, nowDate.getTime() - firstPlayedMs) / 86400000) >= 100) badgeSet.add('days100');
+  if (Math.floor(Math.max(0, nowDate.getTime() - firstPlayedMs) / 86400000) >= 100) {
+    badgeSet.add('days100');
+  }
 
-  const eligibleCatalog = new Set((gameData.chibis || []).filter(c => String(c.rarity || '').toUpperCase() !== 'SSRP').map(c => c.name));
-  const ownedEligible = new Set((targetUserData.inventory?.chibis || []).filter(c => String(c.rarity || '').toUpperCase() !== 'SSRP').map(c => c.name));
-  if (eligibleCatalog.size > 0 && eligibleCatalog.size === ownedEligible.size) badgeSet.add('collections');
+  const eligibleCatalog = new Set(
+    (gameData.chibis || [])
+      .filter(c => c && c.name && String(c.rarity || '').toUpperCase() !== 'SSRP')
+      .map(c => c.name)
+  );
+  const ownedEligible = new Set(
+    (targetUserData.inventory?.chibis || [])
+      .filter(c => c && c.name && String(c.rarity || '').toUpperCase() !== 'SSRP')
+      .map(c => c.name)
+  );
+  if (eligibleCatalog.size > 0 && eligibleCatalog.size === ownedEligible.size) {
+    badgeSet.add('collections');
+  }
 
   const ownedDiceSet = new Set(Array.isArray(targetUserData.ownedDice) ? targetUserData.ownedDice : []);
   if (ownedDiceSet.has('hacker') || targetUserData.equippedDice === 'hacker') badgeSet.add('hacker');
   if (ownedDiceSet.has('archangel') || targetUserData.equippedDice === 'archangel') badgeSet.add('archangel');
 
-  if (targetUserData.rolledUmgr || (targetUserData.inventory?.chibis || []).some(c => String(c.rarity || '').toUpperCase() === 'UGMR')) badgeSet.add('ugmr');
-  if (Number(targetUserData.gamblingEarnings || targetUserData.gamblingWon || 0) >= 1_000_000_000_000) badgeSet.add('gamblingod');
+  if (
+    targetUserData.rolledUmgr ||
+    (targetUserData.inventory?.chibis || []).some(c => c && String(c.rarity || '').toUpperCase() === 'UGMR')
+  ) {
+    badgeSet.add('ugmr');
+  }
+
+  if (Number(targetUserData.gamblingEarnings || targetUserData.gamblingWon || 0) >= 1_000_000_000_000) {
+    badgeSet.add('gamblingod');
+  }
   if (targetUserData.foughtDev3v3) badgeSet.add('devvsplayer');
   if (targetUserId === db?.config?.ownerId || isTester(targetUserId)) badgeSet.add('developer');
   if (targetUserData.permissions === true) badgeSet.add('admin');
@@ -194,9 +250,17 @@ async function evaluateAndSyncUserBadges(targetUserId, targetUserData, guild = n
     try {
       const member = await guild.members.fetch(targetUserId).catch(() => null);
       if (member) {
-        if (member.premiumSinceTimestamp) { badgeSet.add('booster'); badgeSet.add('nitro'); }
+        if (member.premiumSinceTimestamp) {
+          badgeSet.add('booster');
+          badgeSet.add('nitro');
+        }
         if (member.permissions?.has(PermissionsBitField.Flags.Administrator)) badgeSet.add('admin');
-        if (member.permissions?.has(PermissionsBitField.Flags.ModerateMembers) || member.permissions?.has(PermissionsBitField.Flags.ManageMessages)) badgeSet.add('mods');
+        if (
+          member.permissions?.has(PermissionsBitField.Flags.ModerateMembers) ||
+          member.permissions?.has(PermissionsBitField.Flags.ManageMessages)
+        ) {
+          badgeSet.add('mods');
+        }
       }
     } catch {}
   }
@@ -213,26 +277,57 @@ function isValidProfileBgUrl(rawUrl) {
       /\.(gif|png|jpe?g|webp)(\?.*)?$/i.test(parsed.pathname) ||
       ['giphy.com', 'tenor.com', 'discordapp.com', 'discordapp.net'].some(h => parsed.hostname.includes(h))
     );
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 function ensureUser(userId) {
+  if (!userId) return;
+  if (!db.users || typeof db.users !== 'object') db.users = {};
   const now = Date.now();
+
   if (!db.users[userId]) {
     db.users[userId] = {
-      started: false, joinedDate: new Date(now).toLocaleDateString(), firstPlayedAt: now,
-      dice: 10, cash: 0, equippedDice: 'zenith', ownedDice: ['zenith'],
-      gamblingEarnings: 0, rolledUmgr: false, foughtDev3v3: false, points: 0,
-      rank: '<:Unranked:1573804757322178772>', clan: null, customNickname: null,
-      profileBg: null, profileAccentColor: null,
-      highestSeasonRank: '<:Unranked:1573804757322178772>', highestSeasonPoints: 0,
-      inventory: { chibis: [], items: { spray: 0, clover: 0 } }, team: [null, null, null],
-      equippedChibi: null, bestRoll: 'None', bestRollTier: 0, bestRollVal: 0, bestChibi: null,
-      userLevel: 1, userExp: 0, lastDrop: 0, todayDrops: 0, lastDaily: 0, streak: 0,
-      permissions: false, customStatus: null, badges: [], clanMail: []
+      started: false,
+      joinedDate: new Date(now).toLocaleDateString(),
+      firstPlayedAt: now,
+      dice: 10,
+      cash: 0,
+      equippedDice: 'zenith',
+      ownedDice: ['zenith'],
+      gamblingEarnings: 0,
+      rolledUmgr: false,
+      foughtDev3v3: false,
+      points: 0,
+      rank: '<:Unranked:1573804757322178772>',
+      clan: null,
+      customNickname: null,
+      profileBg: null,
+      profileBgTheme: 'crystal',
+      profileAccentColor: null,
+      highestSeasonRank: '<:Unranked:1573804757322178772>',
+      highestSeasonPoints: 0,
+      inventory: { chibis: [], items: { spray: 0, clover: 0 } },
+      team: [null, null, null],
+      equippedChibi: null,
+      bestRoll: 'None',
+      bestRollTier: 0,
+      bestRollVal: 0,
+      bestChibi: null,
+      userLevel: 1,
+      userExp: 0,
+      lastDrop: 0,
+      todayDrops: 0,
+      lastDaily: 0,
+      streak: 0,
+      permissions: false,
+      customStatus: null,
+      badges: [],
+      clanMail: []
     };
     updateUserRank(db.users[userId]);
-    saveUsers();
+    updatePeakRank(db.users[userId]);
   } else {
     const u = db.users[userId];
     if (!u.joinedDate) u.joinedDate = new Date(now).toLocaleDateString();
@@ -249,13 +344,24 @@ function ensureUser(userId) {
     if (!Array.isArray(u.badges)) u.badges = [];
     if (!Array.isArray(u.clanMail)) u.clanMail = [];
     if (typeof u.profileBg !== 'string') u.profileBg = null;
+    if (!u.profileBgTheme || typeof u.profileBgTheme !== 'string') u.profileBgTheme = 'crystal';
     if (typeof u.profileAccentColor !== 'number') u.profileAccentColor = null;
+    if (!u.inventory || typeof u.inventory !== 'object') {
+      u.inventory = { chibis: [], items: { spray: 0, clover: 0 } };
+    }
+    if (!Array.isArray(u.inventory.chibis)) u.inventory.chibis = [];
+    if (!u.inventory.items || typeof u.inventory.items !== 'object') {
+      u.inventory.items = { spray: 0, clover: 0 };
+    }
+    if (!Array.isArray(u.team)) u.team = [null, null, null];
     updateUserRank(u);
     updatePeakRank(u);
   }
 }
 
-function getClanLogoDisplay(logoId) { return (logoId && CLAN_LOGOS[String(logoId)]) || CLAN_LOGOS['1']; }
+function getClanLogoDisplay(logoId) {
+  return (logoId && CLAN_LOGOS[String(logoId)]) || CLAN_LOGOS['1'];
+}
 
 function getClanLogoImageUrl(logoId) {
   const match = getClanLogoDisplay(logoId).match(/^<(a)?:\w+:(\d+)>$/);
@@ -263,7 +369,9 @@ function getClanLogoImageUrl(logoId) {
   return `https://cdn.discordapp.com/emojis/${match[2]}.${match[1] ? 'gif' : 'png'}?size=256`;
 }
 
-function getClanLogoListText() { return Object.entries(CLAN_LOGOS).map(([id, emoji]) => `[${id}] - ${emoji}`).join('\n'); }
+function getClanLogoListText() {
+  return Object.entries(CLAN_LOGOS).map(([id, emoji]) => `[${id}] - ${emoji}`).join('\n');
+}
 
 function getClanMemberRole(clanObj, memberId) {
   if (!clanObj) return 'Member';
@@ -284,7 +392,9 @@ function pushClanMail(userId, mailItem) {
     claimed: Boolean(mailItem.claimed),
     timestamp: Date.now()
   });
-  if (db.users[userId].clanMail.length > 25) db.users[userId].clanMail = db.users[userId].clanMail.slice(0, 25);
+  if (db.users[userId].clanMail.length > 25) {
+    db.users[userId].clanMail = db.users[userId].clanMail.slice(0, 25);
+  }
 }
 
 function parseDurationToMs(durationStr) {
@@ -298,7 +408,9 @@ function parseDurationToMs(durationStr) {
 function formatTimeRemaining(ms) {
   if (ms <= 0) return toSmallCaps('Ended');
   const sec = Math.floor(ms / 1000);
-  const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
   return toSmallCaps(d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`);
 }
 
@@ -311,13 +423,17 @@ function formatTimePlayed(startInput, nowMs = Date.now()) {
   const parts = [];
   for (const [label, size] of [['y', 31536000], ['mo', 2592000], ['w', 604800], ['d', 86400], ['h', 3600], ['m', 60]]) {
     const count = Math.floor(rem / size);
-    if (count > 0) { parts.push(`${count}${label}`); rem %= size; }
+    if (count > 0) {
+      parts.push(`${count}${label}`);
+      rem %= size;
+    }
   }
   parts.push(`${rem}s`);
   return parts.join(' ');
 }
 
 function addExpAndLevelUp(user, chibi, baseExpAmount) {
+  if (!user || typeof user !== 'object') return 0;
   const xpMult = Number(db?.config?.globalXpMultiplier) || 1.0;
   const expAmount = Math.round((Number(baseExpAmount) || 0) * xpMult);
   const settings = gameData.settings || {};
@@ -334,9 +450,13 @@ function addExpAndLevelUp(user, chibi, baseExpAmount) {
     userMaxExp = userExpBase + (user.userLevel - 1) * userExpPerLevel;
   }
 
-  if (chibi) {
-    const baseChibiExp = chibi.isShiny ? (Number(settings.shinyChibiExpBase) || 150) : (Number(settings.normalChibiExpBase) || 100);
-    const perLvl = chibi.isShiny ? (Number(settings.shinyChibiExpPerLevel) || 75) : (Number(settings.normalChibiExpPerLevel) || 50);
+  if (chibi && typeof chibi === 'object') {
+    const baseChibiExp = chibi.isShiny
+      ? (Number(settings.shinyChibiExpBase) || 150)
+      : (Number(settings.normalChibiExpBase) || 100);
+    const perLvl = chibi.isShiny
+      ? (Number(settings.shinyChibiExpPerLevel) || 75)
+      : (Number(settings.normalChibiExpPerLevel) || 50);
     chibi.level = Math.max(1, Number(chibi.level) || 1);
     chibi.exp = (Number(chibi.exp) || 0) + expAmount;
 
@@ -360,11 +480,32 @@ function parseOddsNumber(oddsString) {
 }
 
 module.exports = {
-  SHOP_DICE_MAP, WEATHER_EVENT_POOL, formatCompactValue, formatCompactNumber,
-  isTester, canSeeUnreleasedBeta, toSmallCaps, getRarityIconMap, getEquippedDiceInfo,
-  getActiveWeatherEvent, rollWeatherEvent, getUserRollLuckPercent, resolveRankByPoints,
-  updateUserRank, updatePeakRank, evaluateAndSyncUserBadges, isValidProfileBgUrl,
-  ensureUser, getClanLogoDisplay, getClanLogoImageUrl, getClanLogoListText,
-  getClanMemberRole, pushClanMail, parseDurationToMs, formatTimeRemaining,
-  formatTimePlayed, addExpAndLevelUp, parseOddsNumber
+  SHOP_DICE_MAP,
+  WEATHER_EVENT_POOL,
+  formatCompactValue,
+  formatCompactNumber,
+  isTester,
+  canSeeUnreleasedBeta,
+  toSmallCaps,
+  getRarityIconMap,
+  getEquippedDiceInfo,
+  getActiveWeatherEvent,
+  rollWeatherEvent,
+  getUserRollLuckPercent,
+  resolveRankByPoints,
+  updateUserRank,
+  updatePeakRank,
+  evaluateAndSyncUserBadges,
+  isValidProfileBgUrl,
+  ensureUser,
+  getClanLogoDisplay,
+  getClanLogoImageUrl,
+  getClanLogoListText,
+  getClanMemberRole,
+  pushClanMail,
+  parseDurationToMs,
+  formatTimeRemaining,
+  formatTimePlayed,
+  addExpAndLevelUp,
+  parseOddsNumber
 };
