@@ -1,128 +1,26 @@
 const BADGE_CATALOG = {
   // Obtainable Badges
-  hacker: {
-    key: 'hacker',
-    category: 'Obtainable Badges',
-    name: 'Hacker Badge',
-    icon: '<:Hacker:1573804176457212014>',
-    description: 'Obtaining Hacker Dice'
-  },
-  archangel: {
-    key: 'archangel',
-    category: 'Obtainable Badges',
-    name: 'Archangel Badge',
-    icon: '<:Archangel:1573804118722613279>',
-    description: 'Obtaining Archangel Dice'
-  },
-  days100: {
-    key: 'days100',
-    category: 'Obtainable Badges',
-    name: '100 Days Badge',
-    icon: '<:100days:1573803920055341056>',
-    description: 'Playing 100 Days Are you Crazy?'
-  },
-  collections: {
-    key: 'collections',
-    category: 'Obtainable Badges',
-    name: 'Collections Master Badge',
-    icon: '<:Collectionss:1573804220044541992>',
-    description: 'Complete all Collections Except SSRP or Event chibi'
-  },
-  lvl50: {
-    key: 'lvl50',
-    category: 'Obtainable Badges',
-    name: 'Level 50 Badge',
-    icon: '<:Lvl50:1573805749153439844>',
-    description: 'Reaching Level 50'
-  },
-  lvl100: {
-    key: 'lvl100',
-    category: 'Obtainable Badges',
-    name: 'Level 100 Badge',
-    icon: '<:Lvl100:1573805790525923470>',
-    description: 'Reaching Level 100'
-  },
-  ugmr: {
-    key: 'ugmr',
-    category: 'Obtainable Badges',
-    name: 'UGMR Roller Badge',
-    icon: '<:What:1573806040644980917>',
-    description: 'Rolling UMGR crazy'
-  },
-  gamblingod: {
-    key: 'gamblingod',
-    category: 'Obtainable Badges',
-    name: 'Gambling God Badge',
-    icon: '<:Gamblingod:1573806102771007519>',
-    description: 'Earn 1T money in gambling'
-  },
+  hacker: { key: 'hacker', category: 'Obtainable Badges', name: 'Hacker Badge', icon: '<:Hacker:1573804176457212014>', description: 'Obtaining Hacker Dice' },
+  archangel: { key: 'archangel', category: 'Obtainable Badges', name: 'Archangel Badge', icon: '<:Archangel:1573804118722613279>', description: 'Obtaining Archangel Dice' },
+  days100: { key: 'days100', category: 'Obtainable Badges', name: '100 Days Badge', icon: '<:100days:1573803920055341056>', description: 'Playing 100 Days Are you Crazy?' },
+  collections: { key: 'collections', category: 'Obtainable Badges', name: 'Collections Master Badge', icon: '<:Collectionss:1573804220044541992>', description: 'Complete all Collections Except SSRP or Event chibi' },
+  lvl50: { key: 'lvl50', category: 'Obtainable Badges', name: 'Level 50 Badge', icon: '<:Lvl50:1573805749153439844>', description: 'Reaching Level 50' },
+  lvl100: { key: 'lvl100', category: 'Obtainable Badges', name: 'Level 100 Badge', icon: '<:Lvl100:1573805790525923470>', description: 'Reaching Level 100' },
+  ugmr: { key: 'ugmr', category: 'Obtainable Badges', name: 'UGMR Roller Badge', icon: '<:What:1573806040644980917>', description: 'Rolling UMGR crazy' },
+  gamblingod: { key: 'gamblingod', category: 'Obtainable Badges', name: 'Gambling God Badge', icon: '<:Gamblingod:1573806102771007519>', description: 'Earn 1T money in gambling' },
 
   // Utility Badges
-  devvsplayer: {
-    key: 'devvsplayer',
-    category: 'Utility Badges',
-    name: 'Dev vs Player Badge',
-    icon: '<:DevVsPlayer:1573805960311476245>',
-    description: 'Fighting Developer 3v3'
-  },
-  developer: {
-    key: 'developer',
-    category: 'Utility Badges',
-    name: 'Developer Badge',
-    icon: '<:Dev:1573804306023452682>',
-    description: 'Developer of the bot'
-  },
-  supporter: {
-    key: 'supporter',
-    category: 'Utility Badges',
-    name: 'Supporter Badge',
-    icon: '<:Supporter:1573804400840015874>',
-    description: 'Support the bot since beta'
-  },
-  nitro: {
-    key: 'nitro',
-    category: 'Utility Badges',
-    name: 'Nitro User Badge',
-    icon: '<:Nitrouser:1573804526132265010>',
-    description: 'Obtaining for nitro users'
-  },
-  booster: {
-    key: 'booster',
-    category: 'Utility Badges',
-    name: 'Boosting User Badge',
-    icon: '<:Boostinguser:1573804574123237376>',
-    description: 'Obtaining for booster'
-  },
-  mods: {
-    key: 'mods',
-    category: 'Utility Badges',
-    name: 'Moderator Badge',
-    icon: '<:Mods:1573804640447897602>',
-    description: 'Moderator only'
-  },
-  admin: {
-    key: 'admin',
-    category: 'Utility Badges',
-    name: 'Admin Badge',
-    icon: '<:Admin:1573804706915029083>',
-    description: 'Admin only'
-  },
+  devvsplayer: { key: 'devvsplayer', category: 'Utility Badges', name: 'Dev vs Player Badge', icon: '<:DevVsPlayer:1573805960311476245>', description: 'Fighting Developer 3v3' },
+  developer: { key: 'developer', category: 'Utility Badges', name: 'Developer Badge', icon: '<:Dev:1573804306023452682>', description: 'Developer of the bot' },
+  supporter: { key: 'supporter', category: 'Utility Badges', name: 'Supporter Badge', icon: '<:Supporter:1573804400840015874>', description: 'Support the bot since beta' },
+  nitro: { key: 'nitro', category: 'Utility Badges', name: 'Nitro User Badge', icon: '<:Nitrouser:1573804526132265010>', description: 'Obtaining for nitro users' },
+  booster: { key: 'booster', category: 'Utility Badges', name: 'Boosting User Badge', icon: '<:Boostinguser:1573804574123237376>', description: 'Obtaining for booster' },
+  mods: { key: 'mods', category: 'Utility Badges', name: 'Moderator Badge', icon: '<:Mods:1573804640447897602>', description: 'Moderator only' },
+  admin: { key: 'admin', category: 'Utility Badges', name: 'Admin Badge', icon: '<:Admin:1573804706915029083>', description: 'Admin only' },
 
   // Event Badges
-  halloween2026: {
-    key: 'halloween2026',
-    category: 'Event Badges',
-    name: 'Halloween 2026 Badge',
-    icon: '<:Halloween2026:1573818026745143367>',
-    description: 'Obtained by playing halloween event 2026'
-  },
-  xmas2026: {
-    key: 'xmas2026',
-    category: 'Event Badges',
-    name: 'Xmas 2026 Badge',
-    icon: '<:Xmas2026:1573817982885437490>',
-    description: 'Obtained by playing Xmas event 2026'
-  }
+  halloween2026: { key: 'halloween2026', category: 'Event Badges', name: 'Halloween 2026 Badge', icon: '<:Halloween2026:1573818026745143367>', description: 'Obtained by playing halloween event 2026' },
+  xmas2026: { key: 'xmas2026', category: 'Event Badges', name: 'Xmas 2026 Badge', icon: '<:Xmas2026:1573817982885437490>', description: 'Obtained by playing Xmas event 2026' }
 };
 
 const BALANCE_ICON = '<:Balance:1574526346019864656>';
@@ -151,11 +49,7 @@ const BETA_EMOJIS = {
   CLAN_DESC: '<:Clandesc:1572806342736085052>',
   START_BTN: '<:Start:1572796405033214043>',
   CLAIM_BTN: '<:Claim:1572814245848940707>',
-  RANKS_POS: {
-    1: '<:1st:1572796499979403334>',
-    2: '<:2nd:1572796465355690104>',
-    3: '<:3rd:1572796434867159161>'
-  },
+  RANKS_POS: { 1: '<:1st:1572796499979403334>', 2: '<:2nd:1572796465355690104>', 3: '<:3rd:1572796434867159161>' },
   RARITIES: {
     C: '<:Pcommon:1573802564200300687>',
     U: '<:Puncommon:1573802607561015306>',
@@ -170,18 +64,7 @@ const BETA_EMOJIS = {
   }
 };
 
-const RARITY_ICONS = {
-  C: '<:Pcommon:1573802564200300687>',
-  U: '<:Puncommon:1573802607561015306>',
-  R: '<:Prare:1573802661134864464>',
-  SR: '<:Psr:1573802765459918889>',
-  SRR: '<:Psrr:1573802796040585358>',
-  UTR: '<a:Putr:1573802703090614342>',
-  STR: '<a:Pstr:1573802859491762237>',
-  USRR: '<a:Pusrr:1573802908846264380>',
-  UGMR: '<a:Pugmr:1573802950675923024>',
-  SSRP: '<a:NewSSRP:1572759498198745248>'
-};
+const RARITY_ICONS = { ...BETA_EMOJIS.RARITIES };
 
 const RARITY_RATES = [
   { key: 'C', label: 'Common', emoji: '<:Pcommon:1573802564200300687>', normalPct: 35, shinyPct: 0.0952 },
@@ -195,27 +78,15 @@ const RARITY_RATES = [
   { key: 'UGMR', label: 'UGMR', emoji: '<a:Pugmr:1573802950675923024>', normalPct: 0.015, shinyPct: 0.0001 }
 ];
 
-const CLAN_ROLE_HIERARCHY = {
-  Leader: 4,
-  'Co-Leader': 3,
-  Officer: 2,
-  Deputy: 1,
-  Member: 0
-};
+const CLAN_ROLE_HIERARCHY = { Leader: 4, 'Co-Leader': 3, Officer: 2, Deputy: 1, Member: 0 };
 
 const CLAN_LOGOS = {
-  '1': '<a:Clanlogo1:1572057180704604261>',
-  '2': '<a:Clanlogo2:1572057251022241913>',
-  '3': '<a:Clanlogo3:1572057291400683653>',
-  '4': '<a:Clanlogo4:1572057336112226324>',
-  '5': '<a:Clanlogo5:1572057406102310923>',
-  '6': '<a:Clanlogo6:1572057452864602223>',
-  '7': '<a:Clanlogo7:1572057492501037176>',
-  '8': '<a:Clanlogo8:1572057529817632828>',
-  '9': '<a:Clanlogo9:1572057564135555142>',
-  '10': '<a:Clanlogo10:1572057937814495355>',
-  '11': '<a:Clanlogo11:1572057971830161408>',
-  '12': '<:Cllanlogo12:1572058007532077238>'
+  '1': '<a:Clanlogo1:1572057180704604261>', '2': '<a:Clanlogo2:1572057251022241913>',
+  '3': '<a:Clanlogo3:1572057291400683653>', '4': '<a:Clanlogo4:1572057336112226324>',
+  '5': '<a:Clanlogo5:1572057406102310923>', '6': '<a:Clanlogo6:1572057452864602223>',
+  '7': '<a:Clanlogo7:1572057492501037176>', '8': '<a:Clanlogo8:1572057529817632828>',
+  '9': '<a:Clanlogo9:1572057564135555142>', '10': '<a:Clanlogo10:1572057937814495355>',
+  '11': '<a:Clanlogo11:1572057971830161408>', '12': '<:Cllanlogo12:1572058007532077238>'
 };
 
 const EVENT_ICONS = {
@@ -274,133 +145,34 @@ const TRIVIA_BANK = [
 ];
 
 const SHINY_ICON = '<a:Shinynew:1572053794332872886>';
-const RARITY_HIERARCHY = {
-  SSRP: 10,
-  UGMR: 9,
-  USRR: 8,
-  STR: 7,
-  UTR: 6,
-  SRR: 5,
-  SR: 4,
-  R: 3,
-  U: 2,
-  C: 1
-};
+const RARITY_HIERARCHY = { SSRP: 10, UGMR: 9, USRR: 8, STR: 7, UTR: 6, SRR: 5, SR: 4, R: 3, U: 2, C: 1 };
 
 // PH Event ends on December 2, 2026 (23:59:59.999 local time)
 const PH_EVENT_END_MS = new Date(2026, 11, 2, 23, 59, 59, 999).getTime();
 
 const ECONOMY_JOBS = [
-  {
-    id: 'farmer',
-    name: 'Farmer',
-    emoji: '🌾',
-    minSalary: 50000,
-    maxSalary: 150000,
-    shiftSalary: 250000,
-    isPhEvent: false
-  },
-  {
-    id: 'streamer',
-    name: 'Streamer',
-    emoji: '🎮',
-    minSalary: 80000,
-    maxSalary: 210000,
-    shiftSalary: 450000,
-    isPhEvent: false
-  },
-  {
-    id: 'youtuber',
-    name: 'YouTuber',
-    emoji: '📹',
-    minSalary: 120000,
-    maxSalary: 500000,
-    shiftSalary: 650000,
-    isPhEvent: false
-  },
-  {
-    id: 'seaman',
-    name: 'Seaman',
-    emoji: '⚓',
-    minSalary: 350000,
-    maxSalary: 600000,
-    shiftSalary: 1200000,
-    isPhEvent: false
-  },
-  {
-    id: 'akyat_bahay',
-    name: 'Akyat Bahay',
-    emoji: '🥷',
-    minSalary: 350000,
-    maxSalary: 800000,
-    shiftSalary: 1000000,
-    isPhEvent: true
-  },
-  {
-    id: 'adik_sa_sha',
-    name: 'Adik sa Sha',
-    emoji: '😵‍💫',
-    minSalary: 500000,
-    maxSalary: 1300000,
-    shiftSalary: 5000000,
-    isPhEvent: true
-  },
-  {
-    id: 'promoter_sa_sugal',
-    name: 'Promoter Sa Sugal',
-    emoji: '🎲',
-    minSalary: 900000,
-    maxSalary: 3450000,
-    shiftSalary: 15000000,
-    isPhEvent: true
-  },
-  {
-    id: 'artista_sa_pilipinas',
-    name: 'Artista Sa Pilipinas',
-    emoji: '🌟',
-    minSalary: 2300000,
-    maxSalary: 6700000,
-    shiftSalary: 25000000,
-    isPhEvent: true
-  },
-  {
-    id: 'bangag_na_senator',
-    name: 'Bangag Na Senator',
-    emoji: '🏛️',
-    minSalary: 5000000,
-    maxSalary: 12000000,
-    shiftSalary: 75000000,
-    isPhEvent: true
-  }
+  { id: 'farmer', name: 'Farmer', emoji: '🌾', minSalary: 50000, maxSalary: 150000, shiftSalary: 250000, isPhEvent: false },
+  { id: 'streamer', name: 'Streamer', emoji: '🎮', minSalary: 80000, maxSalary: 210000, shiftSalary: 450000, isPhEvent: false },
+  { id: 'youtuber', name: 'YouTuber', emoji: '📹', minSalary: 120000, maxSalary: 500000, shiftSalary: 650000, isPhEvent: false },
+  { id: 'seaman', name: 'Seaman', emoji: '⚓', minSalary: 350000, maxSalary: 600000, shiftSalary: 1200000, isPhEvent: false },
+  { id: 'akyat_bahay', name: 'Akyat Bahay', emoji: '🥷', minSalary: 350000, maxSalary: 800000, shiftSalary: 1000000, isPhEvent: true },
+  { id: 'adik_sa_sha', name: 'Adik sa Sha', emoji: '😵‍💫', minSalary: 500000, maxSalary: 1300000, shiftSalary: 5000000, isPhEvent: true },
+  { id: 'promoter_sa_sugal', name: 'Promoter Sa Sugal', emoji: '🎲', minSalary: 900000, maxSalary: 3450000, shiftSalary: 15000000, isPhEvent: true },
+  { id: 'artista_sa_pilipinas', name: 'Artista Sa Pilipinas', emoji: '🌟', minSalary: 2300000, maxSalary: 6700000, shiftSalary: 25000000, isPhEvent: true },
+  { id: 'bangag_na_senator', name: 'Bangag Na Senator', emoji: '🏛️', minSalary: 5000000, maxSalary: 12000000, shiftSalary: 75000000, isPhEvent: true }
 ];
 
-function isPhEventActive(nowMs = Date.now()) {
-  return Number(nowMs) <= PH_EVENT_END_MS;
-}
-
-function getActiveEconomyJobs(nowMs = Date.now()) {
-  const phActive = isPhEventActive(nowMs);
-  return ECONOMY_JOBS.filter(job => !job.isPhEvent || phActive);
-}
+const isPhEventActive = (nowMs = Date.now()) => Number(nowMs) <= PH_EVENT_END_MS;
+const getActiveEconomyJobs = (nowMs = Date.now()) => ECONOMY_JOBS.filter(job => !job.isPhEvent || isPhEventActive(nowMs));
 
 const CSELL_RATES = {
-  C: 8000,
-  U: 16000,
-  R: 24000,
-  SR: 32000,
-  SRR: 43000,
-  UTR: 54000,
-  STR: 61000,
-  SRT: 61000,
-  USRR: 100000,
-  UGMR: 200000,
-  UMGR: 200000,
-  SSRP: 500000
+  C: 8000, U: 16000, R: 24000, SR: 32000, SRR: 43000, UTR: 54000,
+  STR: 61000, SRT: 61000, USRR: 100000, UGMR: 200000, UMGR: 200000, SSRP: 500000
 };
 
 const ALL_VALID_COMMANDS = new Set([
   'start', 'help', 'status', 'roll', 'drop', 'slot', 'shop', 'rarities',
-  'event', 'eadventure', 'eshop', 'ecrystal', 'daily', 'points', 'rank', 'ranks',
+  'event', 'eadventure', 'ca', 'eshop', 'es', 'ecrystal', 'daily', 'points', 'rank', 'ranks',
   'ccranks', 'customnn', 'profilebg', 'setbg', 'seasons', 'higheststats', 'tradehistory',
   'cstats', 'equipteam', 'battle', 'inventory', 'collections', 'profile', 'trade',
   'clanlist', 'cclaninfo', 'ccreateclan', 'cclanjoin', 'clanleave', 'clanrename',
@@ -408,7 +180,7 @@ const ALL_VALID_COMMANDS = new Set([
   'prefixchange', 'enablec', 'disablec', 'meme', 'trivia',
   'work', 'working', 'workshift', 'balance', 'casino', 'blackjack', 'coinflip',
   'ticketuse', 'ticketbuy', 'lottery', 'csell',
-  'cnpc', 'cget', 'nrebirth', 'nascend', 'nsredeem', 'nsr', 'snsredeem', 'snsr',
+  'cnpc', 'npcinv', 'cget', 'nrebirth', 'nascend', 'nsredeem', 'nsr', 'snsredeem', 'snsr',
   'redeems', 'redeem', 'fnpcspawn', 'fns', 'redeemgive', 'sredeemgive',
   'ownercommands', 'admincommands', 'ownerbotmaintenance', 'ownersetstatus',
   'adminrestoreall', 'ownerresetdata', 'fixadmin', 'ownersecretpanel',
@@ -425,25 +197,9 @@ const TESTER_ONLY_COMMANDS = new Set([
 ]);
 
 module.exports = {
-  BADGE_CATALOG,
-  BALANCE_ICON,
-  BETA_EMOJIS,
-  RARITY_ICONS,
-  RARITY_RATES,
-  CLAN_ROLE_HIERARCHY,
-  CLAN_LOGOS,
-  EVENT_ICONS,
-  EVENT_NPCS,
-  EVENT_CHIBIS_POOL,
-  SEASON_LIST,
-  TRIVIA_BANK,
-  SHINY_ICON,
-  RARITY_HIERARCHY,
-  PH_EVENT_END_MS,
-  ECONOMY_JOBS,
-  isPhEventActive,
-  getActiveEconomyJobs,
-  CSELL_RATES,
-  ALL_VALID_COMMANDS,
-  TESTER_ONLY_COMMANDS
+  BADGE_CATALOG, BALANCE_ICON, BETA_EMOJIS, RARITY_ICONS, RARITY_RATES,
+  CLAN_ROLE_HIERARCHY, CLAN_LOGOS, EVENT_ICONS, EVENT_NPCS, EVENT_CHIBIS_POOL,
+  SEASON_LIST, TRIVIA_BANK, SHINY_ICON, RARITY_HIERARCHY,
+  PH_EVENT_END_MS, ECONOMY_JOBS, isPhEventActive, getActiveEconomyJobs, CSELL_RATES,
+  ALL_VALID_COMMANDS, TESTER_ONLY_COMMANDS
 };
