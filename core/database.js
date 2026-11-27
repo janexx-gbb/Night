@@ -3,7 +3,9 @@ const path = require('path');
 const mongoose = require('mongoose');
 const { RARITY_RATES } = require('./constants');
 
-const DATA_FILE = path.join(__dirname, '..', 'data.json');
+const DATA_FILE_LOWER = path.join(__dirname, '..', 'data.json');
+const DATA_FILE_UPPER = path.join(__dirname, '..', 'Data.json');
+const DATA_FILE = fs.existsSync(DATA_FILE_LOWER) ? DATA_FILE_LOWER : DATA_FILE_UPPER;
 
 const DEFAULT_STATS = {
   C:    { normal: { hp: 100, hpPer: 10, atk: 15, atkPer: 2, def: 10, defPer: 1 }, shiny: { hp: 150, hpPer: 15, atk: 24, atkPer: 3, def: 16, defPer: 2 } },
@@ -17,53 +19,6 @@ const DEFAULT_STATS = {
   UGMR: { normal: { hp: 2800, hpPer: 280, atk: 450, atkPer: 56, def: 295, defPer: 36 }, shiny: { hp: 4200, hpPer: 420, atk: 675, atkPer: 84, def: 440, defPer: 55 } },
   SSRP: { normal: { hp: 3500, hpPer: 350, atk: 550, atkPer: 68, def: 360, defPer: 45 }, shiny: { hp: 5250, hpPer: 525, atk: 825, atkPer: 102, def: 540, defPer: 68 } }
 };
-
-function normalizeGameData(raw) {
-  const data = raw && typeof raw === 'object' ? raw : {};
-  data.settings = {
-    maxRollQuantity: 25,
-    dropCooldownSeconds: 10,
-    normalChibiExpBase: 100,
-    normalChibiExpPerLevel: 50,
-    shinyChibiExpBase: 200,
-    shinyChibiExpPerLevel: 100,
-    ...(data.settings || {})
-  };
-  data.rarities = Array.isArray(data.rarities) && data.rarities.length > 0 ? data.rarities : [];
-  data.rarityRates = Array.isArray(data.rarityRates) && data.rarityRates.length > 0
-    ? data.rarityRates
-    : RARITY_RATES;
-  data.dropTable = Array.isArray(data.dropTable) && data.dropTable.length > 0
-    ? data.dropTable
-    : [
-        { name: 'Small Dice Pouch', emoji: '🎲', dice: 3, weight: 60 },
-        { name: 'Medium Dice Bag', emoji: '🎒', dice: 6, weight: 28 },
-        { name: 'Golden Dice Chest', emoji: '🧰', dice: 12, weight: 10 },
-        { name: 'Mythic Dice Jackpot', emoji: '💎', dice: 25, weight: 2 }
-      ];
-  data.chibis = Array.isArray(data.chibis)
-    ? data.chibis.filter(c => c && String(c.name || '').toLowerCase() !== 'str_aegis')
-    : [];
-  data.eventChibis = Array.isArray(data.eventChibis) ? data.eventChibis : [];
-  data.stats = { ...DEFAULT_STATS, ...(data.stats || {}) };
-  for (const tierKey of Object.keys(DEFAULT_STATS)) {
-    data.stats[tierKey] = {
-      normal: { ...DEFAULT_STATS[tierKey].normal, ...(data.stats[tierKey]?.normal || {}) },
-      shiny: { ...DEFAULT_STATS[tierKey].shiny, ...(data.stats[tierKey]?.shiny || {}) }
-    };
-  }
-  return data;
-}
-
-function loadGameData() {
-  if (!fs.existsSync(DATA_FILE)) {
-    throw new Error('data.json is missing! Please make sure your data.json is in the root directory.');
-  }
-  const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  return normalizeGameData(parsed);
-}
-
-const gameData = loadGameData();
 
 const DEFAULT_CONFIG = {
   ownerId: '',
@@ -102,6 +57,69 @@ const DEFAULT_CONFIG = {
   }
 };
 
+function normalizeGameData(raw) {
+  const data = raw && typeof raw === 'object' ? { ...raw } : {};
+  data.settings = {
+    maxRollQuantity: 25,
+    dropCooldownSeconds: 10,
+    normalChibiExpBase: 100,
+    normalChibiExpPerLevel: 50,
+    shinyChibiExpBase: 200,
+    shinyChibiExpPerLevel: 100,
+    ...(data.settings && typeof data.settings === 'object' ? data.settings : {})
+  };
+  data.rarities = Array.isArray(data.rarities) && data.rarities.length > 0 ? data.rarities : [];
+  data.rarityRates = Array.isArray(data.rarityRates) && data.rarityRates.length > 0
+    ? data.rarityRates
+    : RARITY_RATES;
+  data.shopDice = Array.isArray(data.shopDice) ? data.shopDice : [];
+  data.weatherEvents = Array.isArray(data.weatherEvents) ? data.weatherEvents : [];
+  data.dropTable = Array.isArray(data.dropTable) && data.dropTable.length > 0
+    ? data.dropTable
+    : [
+        { name: 'Small Dice Pouch', emoji: '🎲', dice: 3, weight: 60 },
+        { name: 'Medium Dice Bag', emoji: '🎒', dice: 6, weight: 28 },
+        { name: 'Golden Dice Chest', emoji: '🧰', dice: 12, weight: 10 },
+        { name: 'Mythic Dice Jackpot', emoji: '💎', dice: 25, weight: 2 }
+      ];
+  data.chibis = Array.isArray(data.chibis)
+    ? data.chibis.filter(c => c && typeof c === 'object' && String(c.name || '').toLowerCase() !== 'str_aegis')
+    : [];
+  data.eventChibis = Array.isArray(data.eventChibis)
+    ? data.eventChibis.filter(c => c && typeof c === 'object')
+    : [];
+
+  const mergedStats = { ...DEFAULT_STATS };
+  if (data.stats && typeof data.stats === 'object') {
+    for (const [tierKey, tierVal] of Object.entries(data.stats)) {
+      if (!tierVal || typeof tierVal !== 'object') continue;
+      const baseTier = DEFAULT_STATS[tierKey] || DEFAULT_STATS.C;
+      mergedStats[tierKey] = {
+        normal: { ...baseTier.normal, ...(tierVal.normal && typeof tierVal.normal === 'object' ? tierVal.normal : {}) },
+        shiny: { ...baseTier.shiny, ...(tierVal.shiny && typeof tierVal.shiny === 'object' ? tierVal.shiny : {}) }
+      };
+    }
+  }
+  data.stats = mergedStats;
+
+  return data;
+}
+
+function loadGameData() {
+  const targetFile = fs.existsSync(DATA_FILE_LOWER)
+    ? DATA_FILE_LOWER
+    : (fs.existsSync(DATA_FILE_UPPER) ? DATA_FILE_UPPER : null);
+
+  if (!targetFile) {
+    throw new Error('data.json (or Data.json) is missing! Please make sure it is in the root directory.');
+  }
+
+  const parsed = JSON.parse(fs.readFileSync(targetFile, 'utf8'));
+  return normalizeGameData(parsed);
+}
+
+const gameData = loadGameData();
+
 const GameStateSchema = new mongoose.Schema({
   _id: { type: String, default: 'main_state' },
   users: { type: Object, default: {} },
@@ -116,8 +134,13 @@ const GameStateSchema = new mongoose.Schema({
 const GameState = mongoose.models.GameState || mongoose.model('GameState', GameStateSchema);
 
 const db = {
-  users: {}, clans: {}, guildPrefixes: {}, channelRestrictions: {},
-  bannedUsers: {}, tradeHistories: {}, config: JSON.parse(JSON.stringify(DEFAULT_CONFIG))
+  users: {},
+  clans: {},
+  guildPrefixes: {},
+  channelRestrictions: {},
+  bannedUsers: {},
+  tradeHistories: {},
+  config: JSON.parse(JSON.stringify(DEFAULT_CONFIG))
 };
 
 function sanitizeUserInventories(usersObj) {
@@ -156,24 +179,53 @@ function sanitizeUserInventories(usersObj) {
 async function initDatabase() {
   try {
     const mongoUri = process.env.MONGO_URI;
-    if (!mongoUri) throw new Error('MONGO_URI environment variable is missing!');
+    if (!mongoUri) {
+      throw new Error('MONGO_URI environment variable is missing!');
+    }
+
     await mongoose.connect(mongoUri);
     console.log('Connected to MongoDB successfully!');
 
     let state = await GameState.findById('main_state');
     if (!state) {
       state = await GameState.create({
-        _id: 'main_state', users: {}, clans: {}, guildPrefixes: {},
-        channelRestrictions: {}, bannedUsers: {}, tradeHistories: {}, config: db.config
+        _id: 'main_state',
+        users: {},
+        clans: {},
+        guildPrefixes: {},
+        channelRestrictions: {},
+        bannedUsers: {},
+        tradeHistories: {},
+        config: JSON.parse(JSON.stringify(DEFAULT_CONFIG))
       });
     }
-    db.users = state.users || {};
-    db.clans = state.clans || {};
-    db.guildPrefixes = state.guildPrefixes || {};
-    db.channelRestrictions = state.channelRestrictions || {};
-    db.bannedUsers = state.bannedUsers || {};
-    db.tradeHistories = state.tradeHistories || {};
-    db.config = { ...db.config, ...(state.config || {}) };
+
+    const baseConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+    const savedConfig = state.config && typeof state.config === 'object' ? state.config : {};
+
+    db.users = state.users && typeof state.users === 'object' ? state.users : {};
+    db.clans = state.clans && typeof state.clans === 'object' ? state.clans : {};
+    db.guildPrefixes = state.guildPrefixes && typeof state.guildPrefixes === 'object' ? state.guildPrefixes : {};
+    db.channelRestrictions = state.channelRestrictions && typeof state.channelRestrictions === 'object' ? state.channelRestrictions : {};
+    db.bannedUsers = state.bannedUsers && typeof state.bannedUsers === 'object' ? state.bannedUsers : {};
+    db.tradeHistories = state.tradeHistories && typeof state.tradeHistories === 'object' ? state.tradeHistories : {};
+    db.config = {
+      ...baseConfig,
+      ...savedConfig,
+      testers: Array.isArray(savedConfig.testers) ? savedConfig.testers : baseConfig.testers,
+      clanRewards: {
+        ...baseConfig.clanRewards,
+        ...(savedConfig.clanRewards && typeof savedConfig.clanRewards === 'object' ? savedConfig.clanRewards : {})
+      },
+      eventCrystals: {
+        ...baseConfig.eventCrystals,
+        ...(savedConfig.eventCrystals && typeof savedConfig.eventCrystals === 'object' ? savedConfig.eventCrystals : {})
+      },
+      eventShop: {
+        ...baseConfig.eventShop,
+        ...(savedConfig.eventShop && typeof savedConfig.eventShop === 'object' ? savedConfig.eventShop : {})
+      }
+    };
 
     let needsSave = sanitizeUserInventories(db.users);
     for (const [gId, pref] of Object.entries(db.guildPrefixes)) {
@@ -182,7 +234,9 @@ async function initDatabase() {
         needsSave = true;
       }
     }
-    if (needsSave) await saveUsers();
+    if (needsSave) {
+      await saveUsers();
+    }
   } catch (err) {
     console.error('Database connection error:', err);
     process.exit(1);
@@ -192,7 +246,9 @@ async function initDatabase() {
 async function saveUsers() {
   try {
     let state = await GameState.findById('main_state');
-    if (!state) state = new GameState({ _id: 'main_state' });
+    if (!state) {
+      state = new GameState({ _id: 'main_state' });
+    }
     state.users = db.users;
     state.clans = db.clans;
     state.guildPrefixes = db.guildPrefixes;
@@ -200,6 +256,7 @@ async function saveUsers() {
     state.bannedUsers = db.bannedUsers;
     state.tradeHistories = db.tradeHistories;
     state.config = db.config;
+
     state.markModified('users');
     state.markModified('clans');
     state.markModified('guildPrefixes');
@@ -207,10 +264,18 @@ async function saveUsers() {
     state.markModified('bannedUsers');
     state.markModified('tradeHistories');
     state.markModified('config');
+
     await state.save();
   } catch (err) {
     console.error('Failed to save data to MongoDB:', err);
   }
 }
 
-module.exports = { DATA_FILE, gameData, GameState, db, initDatabase, saveUsers };
+module.exports = {
+  DATA_FILE,
+  gameData,
+  GameState,
+  db,
+  initDatabase,
+  saveUsers
+};
