@@ -401,7 +401,7 @@ async function execute(ctx) {
     pubCollector.on('collect', async i => {
       if (!i.deferred && !i.replied) await i.deferUpdate().catch(() => {});
       if (i.user.id !== userId) {
-        return i.followUp({ content: toSmallCaps('❌ Only the command sender can confirm publishing updates!'), ephemeral: true });
+        return i.followUp({ content: toSmallCaps('❌ Only the command sender can confirm publishing updates!'), ephemeral: true }).catch(() => {});
       }
       decided = true;
       if (i.customId === 'pubnewupd_confirm_no') {
@@ -421,7 +421,7 @@ async function execute(ctx) {
           `• Published by: <@${userId}>`
         ))
       );
-      await confirmMsg.edit({ content: '', components: [container], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
+      await confirmMsg.edit({ content: null, components: [container], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
     });
 
     pubCollector.on('end', async () => {
@@ -514,6 +514,7 @@ async function execute(ctx) {
     let restoredCount = 0;
     for (const uId of Object.keys(db.users)) {
       ensureUser(uId);
+      ensureNpcUserFields(db.users[uId]);
       updateUserRank(db.users[uId]);
       updatePeakRank(db.users[uId]);
       await syncUserBadgesSafe(uId, db.users[uId], message.guild);
@@ -563,6 +564,7 @@ async function execute(ctx) {
         profileBg: null,
         profileBgTheme: 'crystal'
       };
+      ensureNpcUserFields(db.users[uId]);
     }
     db.clans = {};
     db.tradeHistories = {};
@@ -899,4 +901,4 @@ async function execute(ctx) {
   return false;
 }
 
-module.exports = { commands: ADMIN_CMDS, execute }; 
+module.exports = { commands: ADMIN_CMDS, execute };
