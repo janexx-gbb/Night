@@ -29,25 +29,19 @@ const saveUsers = () => {
   return saveQueue;
 };
 
-let economyModule = null;
-const economyCmdPath = path.join(__dirname, 'commmands', 'economycommands.js');
-if (fs.existsSync(economyCmdPath)) {
+function loadCommandModule(filename) {
+  const fullPath = path.join(__dirname, 'commmands', filename);
+  if (!fs.existsSync(fullPath)) return null;
   try {
-    economyModule = require(economyCmdPath);
+    return require(fullPath);
   } catch (err) {
-    console.error('[economycommands] Failed to load module:', err);
+    console.error(`[${filename}] Failed to load module:`, err);
+    return null;
   }
 }
 
-let npcModule = null;
-const npcCmdPath = path.join(__dirname, 'commmands', 'npccommands.js');
-if (fs.existsSync(npcCmdPath)) {
-  try {
-    npcModule = require(npcCmdPath);
-  } catch (err) {
-    console.error('[npccommands] Failed to load module:', err);
-  }
-}
+const economyModule = loadCommandModule('economycommands.js');
+const npcModule = loadCommandModule('npccommands.js');
 
 const client = new Client({
   intents: [
@@ -63,40 +57,60 @@ const channelSpawnMessageCounters = new Map();
 const NPC_RANDOM_SPAWN_EVERY_N_MESSAGES = 25;
 
 const REVAMPED_RARITY_CONFIG = [
-  { key: 'C', label: 'Common', emoji: '<:Pcommon:1573802564200300687>', normalPct: 35, shinyPct: 0.0952, weight: 35 },
-  { key: 'U', label: 'Uncommon', emoji: '<:Puncommon:1573802607561015306>', normalPct: 15, shinyPct: 0.0721, weight: 15 },
-  { key: 'R', label: 'Rare', emoji: '<:Prare:1573802661134864464>', normalPct: 8, shinyPct: 0.0572, weight: 8 },
-  { key: 'SR', label: 'SR', emoji: '<:Psr:1573802765459918889>', normalPct: 4, shinyPct: 0.0217, weight: 4 },
-  { key: 'SRR', label: 'SRR', emoji: '<:Psrr:1573802796040585358>', normalPct: 1, shinyPct: 0.0137, weight: 1 },
-  { key: 'UTR', label: 'UTR', emoji: '<a:Putr:1573802703090614342>', normalPct: 0.49, shinyPct: 0.0092, weight: 0.49 },
-  { key: 'STR', label: 'STR', emoji: '<a:Pstr:1573802859491762237>', normalPct: 0.1, shinyPct: 0.0028, weight: 0.1 },
-  { key: 'USRR', label: 'USRR', emoji: '<a:Pusrr:1573802908846264380>', normalPct: 0.0190, shinyPct: 0.0010, weight: 0.0190 },
-  { key: 'UGMR', label: 'UGMR', emoji: '<a:Pugmr:1573802950675923024>', normalPct: 0.015, shinyPct: 0.0001, weight: 0.015 }
+  { key: 'C', label: 'Common', emoji: '<:Pcommon:1573802564200300687>', normalPct: 35, shinyPct: 0.0952 },
+  { key: 'U', label: 'Uncommon', emoji: '<:Puncommon:1573802607561015306>', normalPct: 15, shinyPct: 0.0721 },
+  { key: 'R', label: 'Rare', emoji: '<:Prare:1573802661134864464>', normalPct: 8, shinyPct: 0.0572 },
+  { key: 'SR', label: 'SR', emoji: '<:Psr:1573802765459918889>', normalPct: 4, shinyPct: 0.0217 },
+  { key: 'SRR', label: 'SRR', emoji: '<:Psrr:1573802796040585358>', normalPct: 1, shinyPct: 0.0137 },
+  { key: 'UTR', label: 'UTR', emoji: '<a:Putr:1573802703090614342>', normalPct: 0.49, shinyPct: 0.0092 },
+  { key: 'STR', label: 'STR', emoji: '<a:Pstr:1573802859491762237>', normalPct: 0.1, shinyPct: 0.0028 },
+  { key: 'USRR', label: 'USRR', emoji: '<a:Pusrr:1573802908846264380>', normalPct: 0.0190, shinyPct: 0.0010 },
+  { key: 'UGMR', label: 'UGMR', emoji: '<a:Pugmr:1573802950675923024>', normalPct: 0.015, shinyPct: 0.0001 }
 ];
 
-const REVAMPED_RARITY_ICONS = REVAMPED_RARITY_CONFIG.reduce((acc, r) => {
-  acc[r.key] = r.emoji;
-  return acc;
-}, {});
-
-const REVAMPED_RARITY_TIER = {
-  SSRP: 10,
-  UGMR: 9,
-  USRR: 8,
-  STR: 7,
-  UTR: 6,
-  SRR: 5,
-  SR: 4,
-  R: 3,
-  U: 2,
-  C: 1
-};
-
+const REVAMPED_RARITY_ICONS = Object.fromEntries(REVAMPED_RARITY_CONFIG.map(r => [r.key, r.emoji]));
+const REVAMPED_RARITY_TIER = { SSRP: 10, UGMR: 9, USRR: 8, STR: 7, UTR: 6, SRR: 5, SR: 4, R: 3, U: 2, C: 1 };
 const BATTLE_ICONS = {
   hp: '<:Hp:1572769347061940356>',
   def: '<:Def:1572769405841055784>',
   atk: '<:Swordx:1572769375318970368>'
 };
+
+const SHORTCUTS = {
+  h: 'help', r: 'roll', p: 'profile', inv: 'inventory', col: 'collections', d: 'drop', t: 'trade',
+  slot: 'slot', pc: 'prefixchange', ec: 'enablec', dc: 'disablec', ac: 'admincommands',
+  oc: 'ownercommands', ownercommands: 'ownercommands', ownerresetdata: 'ownerresetdata',
+  cnn: 'customnn', ss: 'seasons', hss: 'higheststats', ownercl: 'ownercl',
+  owneradminpermsrem: 'owneradminpermsrem', th: 'tradehistory', tradehistory: 'tradehistory',
+  ccr: 'ccranks', ccranks: 'ccranks', rar: 'rarities', event: 'event', eshop: 'eshop',
+  es: 'eshop', cadventure: 'eadventure', ca: 'eadventure', eadventure: 'eadventure', ea: 'eadventure',
+  ecrystal: 'ecrystal', ownersetstatus: 'ownersetstatus', oss: 'ownersetstatus',
+  tf: 'testerfeatures', agb: 'admingivebadges', cp: 'cpromote', ced: 'ceditdesc',
+  w: 'work', wg: 'working', ws: 'workshift', bal: 'balance', cs: 'casino',
+  bj: 'blackjack', cf: 'coinflip', tb: 'ticketbuy', tu: 'ticketuse', lot: 'lottery',
+  sell: 'csell', fns: 'fnpcspawn', nsr: 'nsredeem', snsr: 'snsredeem'
+};
+
+const RESTRICTED_EXEMPT_COMMANDS = new Set([
+  'enablec', 'disablec', 'prefixchange', 'pc', 'admincommands', 'ac', 'oc', 'ownercommands',
+  'ownerresetdata', 'help', 'status', 'fixadmin', 'ownercl', 'owneradminpermsrem',
+  'ownersecretpanel', 'event', 'ownerbotmaintenance', 'adminrestoreall', 'ownersetstatus',
+  'testerpanel', 'addtester', 'removetester', 'pubnewupd', 'testerfeatures', 'tf',
+  'admingivebadges', 'agb', 'cpromote', 'cp', 'cannounce', 'kick', 'cmail', 'ceditdesc', 'ced'
+]);
+
+const NPC_ADMIN_COMMANDS = new Set(['fnpcspawn', 'redeemgive', 'sredeemgive']);
+
+function ensureDbShapes() {
+  if (!db.config || typeof db.config !== 'object') db.config = {};
+  if (!db.clans || typeof db.clans !== 'object') db.clans = {};
+  if (!db.tradeHistories || typeof db.tradeHistories !== 'object') db.tradeHistories = {};
+  if (!db.bannedUsers || typeof db.bannedUsers !== 'object') db.bannedUsers = {};
+  if (!db.channelRestrictions || typeof db.channelRestrictions !== 'object') db.channelRestrictions = {};
+  if (!db.guildPrefixes || typeof db.guildPrefixes !== 'object') db.guildPrefixes = {};
+  if (!db.config.eventCrystals || typeof db.config.eventCrystals !== 'object') db.config.eventCrystals = {};
+  if (!db.config.clanRewards || typeof db.config.clanRewards !== 'object') db.config.clanRewards = {};
+}
 
 const buildStatBar = (current, max, length = 10) => {
   const safeMax = Math.max(1, Number(max) || 1);
@@ -115,125 +129,72 @@ function resolveCatalogBadgeKey(rawKey) {
   if (!rawKey || typeof rawKey !== 'string') return null;
   const cleaned = rawKey.trim().toLowerCase();
   if (BADGE_CATALOG?.[cleaned]) return cleaned;
-
-  const aliases = {
-    nitrouser: 'nitro',
-    support: 'supporter',
-    creator: 'developer'
-  };
-  const mapped = aliases[cleaned];
-  if (mapped && BADGE_CATALOG?.[mapped]) return mapped;
-  return null;
+  const aliases = { nitrouser: 'nitro', support: 'supporter', creator: 'developer' };
+  return BADGE_CATALOG?.[aliases[cleaned]] ? aliases[cleaned] : null;
 }
 
 function formatBadgeCatalogLines(categoryName) {
   const entries = Object.values(BADGE_CATALOG || {}).filter(b => b.category === categoryName);
-  if (!entries.length) return '*None*';
-  return entries.map(b => `${b.icon} **\`${b.key}\`** — ${b.description}`).join('\n');
+  return entries.length ? entries.map(b => `${b.icon} **\`${b.key}\`** — ${b.description}`).join('\n') : '*None*';
 }
 
 function buildHelpCategories(prefix) {
   return {
     rolling: {
-      label: 'Rolling, Drops & Games',
-      emoji: '🎲',
-      title: '🎲 Rolling, Drops & Games',
+      label: 'Rolling, Drops & Games', emoji: '🎲', title: '🎲 Rolling, Drops & Games',
       lines: [
-        `\`${prefix}roll [qty] [boost]\` (\`${prefix}r\`)`,
-        `\`${prefix}drop\` (\`${prefix}d\`)`,
-        `\`${prefix}slot [bet]\``,
-        `\`${prefix}shop\``,
-        `\`${prefix}rarities\` (\`${prefix}rar\`)`
+        `\`${prefix}roll [qty] [boost]\` (\`${prefix}r\`)`, `\`${prefix}drop\` (\`${prefix}d\`)`,
+        `\`${prefix}slot [bet]\``, `\`${prefix}shop\``, `\`${prefix}rarities\` (\`${prefix}rar\`)`
       ]
     },
     economy: {
-      label: 'Rewards & Economy',
-      emoji: '💰',
-      title: '💰 Rewards & Economy',
+      label: 'Rewards & Economy', emoji: '💰', title: '💰 Rewards & Economy',
       lines: [
-        `\`${prefix}work\` (\`${prefix}w\`)`,
-        `\`${prefix}working\` (\`${prefix}wg\`)`,
-        `\`${prefix}workshift\` (\`${prefix}ws\`)`,
-        `\`${prefix}balance\` (\`${prefix}bal\`)`,
-        `\`${prefix}casino\` (\`${prefix}cs\`)`,
-        `\`${prefix}blackjack\` (\`${prefix}bj\`)`,
-        `\`${prefix}coinflip\` (\`${prefix}cf\`)`,
-        `\`${prefix}ticketbuy\` (\`${prefix}tb\`)`,
-        `\`${prefix}ticketuse\` (\`${prefix}tu\`)`,
-        `\`${prefix}lottery\` (\`${prefix}lot\`)`,
-        `\`${prefix}csell [qty] [rarity]\` (\`${prefix}sell\`)`,
-        `\`${prefix}daily\``,
-        `\`${prefix}points\``,
-        `\`${prefix}rank\` / \`${prefix}ranks\``,
-        `\`${prefix}ccranks\` (\`${prefix}ccr\`)`,
-        `\`${prefix}customnn\` (\`${prefix}cnn\`)`,
-        `\`${prefix}profilebg\``,
-        `\`${prefix}setbg\``,
-        `\`${prefix}seasons\` (\`${prefix}ss\`)`,
-        `\`${prefix}higheststats\` (\`${prefix}hss\`)`,
-        `\`${prefix}tradehistory\` (\`${prefix}th\`)`
+        `\`${prefix}work\` (\`${prefix}w\`)`, `\`${prefix}working\` (\`${prefix}wg\`)`,
+        `\`${prefix}workshift\` (\`${prefix}ws\`)`, `\`${prefix}balance\` (\`${prefix}bal\`)`,
+        `\`${prefix}casino\` (\`${prefix}cs\`)`, `\`${prefix}blackjack\` (\`${prefix}bj\`)`,
+        `\`${prefix}coinflip\` (\`${prefix}cf\`)`, `\`${prefix}ticketbuy\` (\`${prefix}tb\`)`,
+        `\`${prefix}ticketuse\` (\`${prefix}tu\`)`, `\`${prefix}lottery\` (\`${prefix}lot\`)`,
+        `\`${prefix}csell [qty] [rarity]\` (\`${prefix}sell\`)`, `\`${prefix}daily\``,
+        `\`${prefix}points\``, `\`${prefix}rank\` / \`${prefix}ranks\``,
+        `\`${prefix}ccranks\` (\`${prefix}ccr\`)`, `\`${prefix}customnn\` (\`${prefix}cnn\`)`,
+        `\`${prefix}profilebg\``, `\`${prefix}setbg\``, `\`${prefix}seasons\` (\`${prefix}ss\`)`,
+        `\`${prefix}higheststats\` (\`${prefix}hss\`)`, `\`${prefix}tradehistory\` (\`${prefix}th\`)`
       ]
     },
     npcs: {
-      label: 'NPCs & Redeems',
-      emoji: '🥷',
-      title: '🥷 NPCs & Redeems',
+      label: 'NPCs & Redeems', emoji: '🥷', title: '🥷 NPCs & Redeems',
       lines: [
-        `\`${prefix}cnpc\``,
-        `\`${prefix}cget <Npcname>\``,
-        `\`${prefix}nrebirth\``,
-        `\`${prefix}nascend\``,
+        `\`${prefix}cnpc\``, `\`${prefix}npcinv\``, `\`${prefix}cget <Npcname>\``,
+        `\`${prefix}nrebirth\``, `\`${prefix}nascend\``,
         `\`${prefix}nsredeem <NPC name>\` (\`${prefix}nsr\`)`,
-        `\`${prefix}snsredeem <Shiny NPC name>\` (\`${prefix}snsr\`)`,
-        `\`${prefix}redeems\``
+        `\`${prefix}snsredeem <Shiny NPC name>\` (\`${prefix}snsr\`)`, `\`${prefix}redeems\``
       ]
     },
     event: {
-      label: 'Event System',
-      emoji: '🌟',
-      title: '🌟 Event System',
+      label: 'Event System', emoji: '🌟', title: '🌟 Event System',
       lines: [
-        `\`${prefix}event\``,
-        `\`${prefix}eadventure\` (\`${prefix}ca\`)`,
-        `\`${prefix}eshop\` (\`${prefix}es\`)`,
-        `\`${prefix}ecrystal\` (\`${prefix}ec\`)`
+        `\`${prefix}event\``, `\`${prefix}eadventure\` (\`${prefix}ca\`)`,
+        `\`${prefix}eshop\` (\`${prefix}es\`)`, `\`${prefix}ecrystal\` (\`${prefix}ec\`)`
       ]
     },
     rpg: {
-      label: 'RPG & Battling',
-      emoji: '⚔️',
-      title: '⚔️ RPG & Battling',
-      lines: [
-        `\`${prefix}cstats\``,
-        `\`${prefix}equipteam [id] [slot]\``,
-        `\`${prefix}battle [@user]\``
-      ]
+      label: 'RPG & Battling', emoji: '⚔️', title: '⚔️ RPG & Battling',
+      lines: [`\`${prefix}cstats\``, `\`${prefix}equipteam [id] [slot]\``, `\`${prefix}battle [@user]\``]
     },
     inventory: {
-      label: 'Inventory & Profile',
-      emoji: '🎒',
-      title: '🎒 Inventory & Profile',
+      label: 'Inventory & Profile', emoji: '🎒', title: '🎒 Inventory & Profile',
       lines: [
-        `\`${prefix}inventory\` (\`${prefix}inv\`)`,
-        `\`${prefix}collections\` (\`${prefix}col\`)`,
-        `\`${prefix}profile\` (\`${prefix}p\`) [@user]`,
-        `\`${prefix}trade\` (\`${prefix}t\`) [@user]`
+        `\`${prefix}inventory\` (\`${prefix}inv\`)`, `\`${prefix}collections\` (\`${prefix}col\`)`,
+        `\`${prefix}profile\` (\`${prefix}p\`) [@user]`, `\`${prefix}trade\` (\`${prefix}t\`) [@user]\``
       ]
     },
     clans: {
-      label: 'Clans & Server',
-      emoji: '🏛️',
-      title: '🏛️ Clans & Server',
+      label: 'Clans & Server', emoji: '🏛️', title: '🏛️ Clans & Server',
       lines: [
-        `\`${prefix}clanlist\``,
-        `\`${prefix}cclaninfo\``,
-        `\`${prefix}ccreateclan\``,
-        `\`${prefix}cclanjoin\``,
-        `\`${prefix}clanleave\``,
-        `\`${prefix}clanrename\``,
-        `\`${prefix}prefixchange\``,
-        `\`${prefix}enablec\``,
-        `\`${prefix}disablec\``
+        `\`${prefix}clanlist\``, `\`${prefix}cclaninfo\``, `\`${prefix}ccreateclan\``,
+        `\`${prefix}cclanjoin\``, `\`${prefix}clanleave\``, `\`${prefix}clanrename\``,
+        `\`${prefix}prefixchange\``, `\`${prefix}enablec\``, `\`${prefix}disablec\``
       ]
     }
   };
@@ -245,10 +206,7 @@ function renderHelpContainer(prefix, selectedKey = null) {
     ? toSmallCaps(`${categories[selectedKey].title}\n`) + categories[selectedKey].lines.join('\n')
     : Object.values(categories).map(cat => toSmallCaps(`${cat.title}\n`) + cat.lines.join('\n')).join('\n\n');
 
-  const activeLabel = selectedKey && categories[selectedKey]
-    ? categories[selectedKey].label
-    : 'All Categories';
-
+  const activeLabel = selectedKey && categories[selectedKey] ? categories[selectedKey].label : 'All Categories';
   return new ContainerBuilder()
     .setAccentColor(0xff77aa)
     .addTextDisplayComponents(
@@ -265,13 +223,9 @@ function renderHelpMenuRow(selectedKey = null) {
   const options = [
     { label: 'All Categories', value: 'all', emoji: '📚', default: !selectedKey },
     ...Object.entries(categories).map(([key, cat]) => ({
-      label: cat.label,
-      value: key,
-      emoji: cat.emoji,
-      default: selectedKey === key
+      label: cat.label, value: key, emoji: cat.emoji, default: selectedKey === key
     }))
   ];
-
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('help_category_select')
@@ -280,7 +234,14 @@ function renderHelpMenuRow(selectedKey = null) {
   );
 }
 
+function getGuildPrefix(guildId) {
+  ensureDbShapes();
+  let prefix = (guildId && db.guildPrefixes[guildId]) || '+';
+  return /^[a-zA-Z]$/.test(prefix) ? '+' : prefix;
+}
+
 client.on('interactionCreate', async interaction => {
+  ensureDbShapes();
   if (npcModule && typeof npcModule.handleNpcInteraction === 'function') {
     const handledNpc = await npcModule.handleNpcInteraction(interaction).catch(err => {
       console.error('[npcInteraction] Error:', err);
@@ -288,9 +249,21 @@ client.on('interactionCreate', async interaction => {
     });
     if (handledNpc) return;
   }
+
+  if (interaction.isStringSelectMenu() && interaction.customId === 'help_category_select') {
+    await interaction.deferUpdate().catch(() => {});
+    const prefix = getGuildPrefix(interaction.guildId);
+    const chosen = interaction.values?.[0];
+    const selectedKey = chosen && chosen !== 'all' ? chosen : null;
+    await interaction.message.edit({
+      components: [renderHelpContainer(prefix, selectedKey), renderHelpMenuRow(selectedKey)],
+      flags: MessageFlags.IsComponentsV2
+    }).catch(() => {});
+  }
 });
 
 client.once('clientReady', async () => {
+  ensureDbShapes();
   console.log(`Logged in as ${client.user.tag}! Bot is ready.`);
 
   if (!db.config.mainGuildId && client.guilds.cache.size > 0) {
@@ -306,19 +279,19 @@ client.once('clientReady', async () => {
   }
 
   const updateStatus = () => {
-    const serverCount = client.guilds.cache.size;
-    client.user.setActivity(toSmallCaps(`+help | Serving ${serverCount} servers`), { type: 0 });
+    client.user.setActivity(toSmallCaps(`+help | Serving ${client.guilds.cache.size} servers`), { type: 0 });
   };
   updateStatus();
   setInterval(updateStatus, 60000);
 
   setInterval(async () => {
+    ensureDbShapes();
     const now = Date.now();
+    const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
     let changed = false;
 
     if (db.config.seasonExpires && now >= db.config.seasonExpires) {
-      for (const uId of Object.keys(db.users)) {
-        const u = db.users[uId];
+      for (const u of Object.values(db.users)) {
         u.highestSeasonRank = u.rank;
         u.highestSeasonPoints = u.points || 0;
         updatePeakRank(u);
@@ -327,63 +300,53 @@ client.once('clientReady', async () => {
       }
       db.config.seasonNumber = (db.config.seasonNumber || 1) + 1;
       db.config.seasonStartedAt = now;
-      db.config.seasonExpires = now + (30 * 24 * 60 * 60 * 1000);
+      db.config.seasonExpires = now + thirtyDaysMs;
       changed = true;
-      console.log(`Season timer expired! Automatically started Season ${db.config.seasonNumber} and archived user peak records.`);
     }
 
     if (db.config.clanSeasonExpires && now >= db.config.clanSeasonExpires) {
-      const sortedClans = Object.entries(db.clans).map(([name, clan]) => {
-        const totalPoints = clan.members.reduce((acc, mId) => acc + (db.users[mId]?.points || 0), 0);
-        return { name, clan, totalPoints };
-      }).sort((a, b) => b.totalPoints - a.totalPoints);
+      const sortedClans = Object.entries(db.clans).map(([name, clan]) => ({
+        name,
+        clan,
+        totalPoints: clan.members.reduce((acc, mId) => acc + (db.users[mId]?.points || 0), 0)
+      })).sort((a, b) => b.totalPoints - a.totalPoints);
 
-      const rewards = db.config.clanRewards || {};
       for (let idx = 0; idx < sortedClans.length; idx++) {
         const rank = idx + 1;
-        const clanEntry = sortedClans[idx];
-        const rewardCfg = rewards[rank];
+        const { name, clan } = sortedClans[idx];
+        const rewardCfg = db.config.clanRewards[rank];
         const sampleChibi = gameData.chibis.find(c => c.rarity === (rewardCfg?.rarity || 'SR')) || gameData.chibis[0];
 
-        for (const mId of clanEntry.clan.members) {
+        for (const mId of clan.members) {
           ensureUser(mId);
-          if (rewardCfg) {
-            pushClanMail(mId, {
-              title: `Clan Season Reward (#${rank})`,
-              body: `Your clan **${clanEntry.name}** finished Rank #${rank}! Reward: ${rewardCfg.qty}x ${rewardCfg.rarity} ${sampleChibi.emoji} ${sampleChibi.name}.`,
-              category: 'Rewards',
-              claimed: false,
-              reward: {
-                type: 'chibi',
-                qty: rewardCfg.qty || 1,
-                rarity: rewardCfg.rarity || 'SR',
-                name: sampleChibi.name,
-                emoji: sampleChibi.emoji
-              }
-            });
-          } else {
-            pushClanMail(mId, {
-              title: `Clan Season Consolation (#${rank})`,
-              body: `Your clan **${clanEntry.name}** finished Rank #${rank}! Reward: 100x 🎲 Dice.`,
-              category: 'Rewards',
-              claimed: false,
-              reward: { type: 'dice', dice: 100 }
-            });
-          }
+          pushClanMail(mId, rewardCfg ? {
+            title: `Clan Season Reward (#${rank})`,
+            body: `Your clan **${name}** finished Rank #${rank}! Reward: ${rewardCfg.qty}x ${rewardCfg.rarity} ${sampleChibi.emoji} ${sampleChibi.name}.`,
+            category: 'Rewards',
+            claimed: false,
+            reward: {
+              type: 'chibi', qty: rewardCfg.qty || 1, rarity: rewardCfg.rarity || 'SR',
+              name: sampleChibi.name, emoji: sampleChibi.emoji
+            }
+          } : {
+            title: `Clan Season Consolation (#${rank})`,
+            body: `Your clan **${name}** finished Rank #${rank}! Reward: 100x 🎲 Dice.`,
+            category: 'Rewards',
+            claimed: false,
+            reward: { type: 'dice', dice: 100 }
+          });
         }
       }
-      db.config.clanSeasonExpires = now + (30 * 24 * 60 * 60 * 1000);
+      db.config.clanSeasonExpires = now + thirtyDaysMs;
       changed = true;
-      console.log('Clan season expired! Rewards queued in clan mail.');
     }
 
-    if (changed) {
-      await saveUsers();
-    }
+    if (changed) await saveUsers();
   }, 60000);
 });
 
 client.on('guildCreate', async guild => {
+  ensureDbShapes();
   if (!db.config.mainGuildId) {
     db.config.mainGuildId = guild.id;
     const state = await GameState.findById('main_state').catch(() => null);
@@ -397,17 +360,16 @@ client.on('guildCreate', async guild => {
 });
 
 client.on('messageCreate', async message => {
-  if (message.author?.id === client.user?.id) return;
+  if (!message.author || message.author.id === client.user?.id) return;
+  ensureDbShapes();
 
   const guildId = message.guild ? message.guild.id : 'DM';
-  let currentPrefix = (db.guildPrefixes && db.guildPrefixes[guildId]) || '+';
-  if (/^[a-zA-Z]$/.test(currentPrefix)) currentPrefix = '+';
+  const currentPrefix = getGuildPrefix(guildId);
 
-  // NPC leveling via chatting and using other bots + periodic random NPC spawn
   if (npcModule && message.guild && !message.content.startsWith(currentPrefix)) {
-    const actorUserId = message.author.id;
-    if (db.users?.[actorUserId]?.started) {
-      await npcModule.processNpcChatOrBotActivity(message, db.users[actorUserId], currentPrefix).catch(() => {});
+    const actorUser = db.users?.[message.author.id];
+    if (actorUser?.started && typeof npcModule.processNpcChatOrBotActivity === 'function') {
+      await npcModule.processNpcChatOrBotActivity(message, actorUser, currentPrefix).catch(() => {});
     }
     if (!message.author.bot && typeof npcModule.spawnNpcInChannel === 'function') {
       const nextCount = (channelSpawnMessageCounters.get(message.channel.id) || 0) + 1;
@@ -420,35 +382,18 @@ client.on('messageCreate', async message => {
     }
   }
 
-  if (message.author.bot) return;
-  if (!message.content.startsWith(currentPrefix)) return;
+  if (message.author.bot || !message.content.startsWith(currentPrefix)) return;
   const afterPrefix = message.content.slice(currentPrefix.length);
   if (!afterPrefix || afterPrefix.startsWith(' ')) return;
 
   const args = afterPrefix.trim().split(/ +/);
-  let command = args.shift().toLowerCase();
+  let command = (args.shift() || '').toLowerCase();
   if (!command) return;
-
-  const shortcuts = {
-    h: 'help', r: 'roll', p: 'profile', inv: 'inventory', col: 'collections', d: 'drop', t: 'trade',
-    slot: 'slot', pc: 'prefixchange', ec: 'enablec', dc: 'disablec', ac: 'admincommands',
-    oc: 'ownercommands', ownercommands: 'ownercommands', ownerresetdata: 'ownerresetdata',
-    cnn: 'customnn', ss: 'seasons', hss: 'higheststats', ownercl: 'ownercl',
-    owneradminpermsrem: 'owneradminpermsrem', th: 'tradehistory', tradehistory: 'tradehistory',
-    ccr: 'ccranks', ccranks: 'ccranks', rar: 'rarities', event: 'event', eshop: 'eshop',
-    es: 'eshop', cadventure: 'eadventure', ca: 'eadventure', eadventure: 'eadventure', ea: 'eadventure',
-    ecrystal: 'ecrystal', ownersetstatus: 'ownersetstatus', oss: 'ownersetstatus',
-    tf: 'testerfeatures', agb: 'admingivebadges', cp: 'cpromote', ced: 'ceditdesc',
-    w: 'work', wg: 'working', ws: 'workshift', bal: 'balance', cs: 'casino',
-    bj: 'blackjack', cf: 'coinflip', tb: 'ticketbuy', tu: 'ticketuse', lot: 'lottery',
-    sell: 'csell', fns: 'fnpcspawn', nsr: 'nsredeem', snsr: 'snsredeem'
-  };
-  if (shortcuts[command]) command = shortcuts[command];
+  if (SHORTCUTS[command]) command = SHORTCUTS[command];
 
   const isEconomyCmd = Array.isArray(economyModule?.commands) && economyModule.commands.includes(command);
   const isNpcCmd = Array.isArray(npcModule?.commands) && npcModule.commands.includes(command);
-  const npcAdminCmds = ['fnpcspawn', 'redeemgive', 'sredeemgive'];
-  const isNpcAdminCmd = npcAdminCmds.includes(command);
+  const isNpcAdminCmd = NPC_ADMIN_COMMANDS.has(command);
 
   if (!ALL_VALID_COMMANDS.has(command) && !isEconomyCmd && !isNpcCmd && !isNpcAdminCmd) return;
 
@@ -464,8 +409,9 @@ client.on('messageCreate', async message => {
   if (db.config.maintenanceMode && !isOwner()) {
     return message.reply(toSmallCaps('The bot currently under maintenance.'));
   }
-  if (db.bannedUsers && db.bannedUsers[userId]) {
-    const banInfo = db.bannedUsers[userId];
+
+  const banInfo = db.bannedUsers[userId];
+  if (banInfo) {
     if (banInfo.expires === 'permanent' || Date.now() < banInfo.expires) {
       return message.reply(toSmallCaps('❌ You are banned from using bot commands.'));
     }
@@ -474,14 +420,7 @@ client.on('messageCreate', async message => {
   }
 
   const restrictedChannels = db.channelRestrictions[guildId] || [];
-  const exemptCommands = [
-    'enablec', 'disablec', 'prefixchange', 'pc', 'admincommands', 'ac', 'oc', 'ownercommands',
-    'ownerresetdata', 'help', 'status', 'fixadmin', 'ownercl', 'owneradminpermsrem',
-    'ownersecretpanel', 'event', 'ownerbotmaintenance', 'adminrestoreall', 'ownersetstatus',
-    'testerpanel', 'addtester', 'removetester', 'pubnewupd', 'testerfeatures', 'tf',
-    'admingivebadges', 'agb', 'cpromote', 'cp', 'cannounce', 'kick', 'cmail', 'ceditdesc', 'ced'
-  ];
-  if (restrictedChannels.length > 0 && restrictedChannels.includes(message.channel.id) && !exemptCommands.includes(command)) {
+  if (restrictedChannels.includes(message.channel.id) && !RESTRICTED_EXEMPT_COMMANDS.has(command)) {
     return;
   }
 
@@ -489,12 +428,9 @@ client.on('messageCreate', async message => {
   const nowTime = Date.now();
   if (!cooldowns.has(userId)) cooldowns.set(userId, new Map());
   const timestamps = cooldowns.get(userId);
-  if (timestamps.has(command)) {
-    const expirationTime = timestamps.get(command) + cooldownAmount;
-    if (nowTime < expirationTime) {
-      const timeLeft = (expirationTime - nowTime) / 1000;
-      return message.reply(toSmallCaps(`⏳ Please wait ${timeLeft.toFixed(1)} more seconds before using ${currentPrefix}${command} again.`));
-    }
+  if (timestamps.has(command) && nowTime < timestamps.get(command) + cooldownAmount) {
+    const timeLeft = ((timestamps.get(command) + cooldownAmount - nowTime) / 1000).toFixed(1);
+    return message.reply(toSmallCaps(`⏳ Please wait ${timeLeft} more seconds before using ${currentPrefix}${command} again.`));
   }
   timestamps.set(command, nowTime);
   setTimeout(() => {
@@ -504,15 +440,13 @@ client.on('messageCreate', async message => {
 
   ensureUser(userId);
   const user = db.users[userId];
+  if (typeof user.cash !== 'number' || Number.isNaN(user.cash)) user.cash = 0;
+
   const callerHasBetaView = canSeeUnreleasedBeta(userId) || Boolean(db.config.featuresPublished);
-  const rarityIconsMap = {
-    ...getRarityIconMap(callerHasBetaView),
-    ...REVAMPED_RARITY_ICONS
-  };
+  const rarityIconsMap = { ...getRarityIconMap(callerHasBetaView), ...REVAMPED_RARITY_ICONS };
 
   const getDisplayName = async (uId) => {
-    const uData = db.users[uId];
-    if (uData && uData.customNickname) return uData.customNickname;
+    if (db.users[uId]?.customNickname) return db.users[uId].customNickname;
     try {
       const fetched = await client.users.fetch(uId);
       if (fetched) return fetched.username;
@@ -535,10 +469,8 @@ client.on('messageCreate', async message => {
     const displayName = tData.customNickname || targetMemberObj?.username || 'Player';
 
     const rarityCounts = { SSRP: 0, UGMR: 0, USRR: 0, STR: 0, UTR: 0, SRR: 0, SR: 0, R: 0, U: 0, C: 0 };
-    if (tData.inventory && tData.inventory.chibis) {
-      tData.inventory.chibis.forEach(c => {
-        if (rarityCounts[c.rarity] !== undefined) rarityCounts[c.rarity]++;
-      });
+    for (const c of tData.inventory?.chibis || []) {
+      if (rarityCounts[c.rarity] !== undefined) rarityCounts[c.rarity]++;
     }
 
     const canUsePerk = hasSupporterOrNitro(tData, syncedBadgesList);
@@ -550,9 +482,7 @@ client.on('messageCreate', async message => {
       targetUserData: {
         ...tData,
         profileBg: null,
-        clanLogoId: tData.clan && db.clans[tData.clan]
-          ? db.clans[tData.clan].logoId
-          : null
+        clanLogoId: tData.clan && db.clans[tData.clan] ? db.clans[tData.clan].logoId : null
       },
       targetMember: targetMemberObj,
       displayName,
@@ -589,6 +519,20 @@ client.on('messageCreate', async message => {
     if (command === 'start') {
       if (user.started) return message.reply(toSmallCaps('⚠️ You have already started your Chibi RPG journey!'));
 
+      const initProfile = async (starterDice) => {
+        const nowInit = Date.now();
+        user.started = true;
+        user.joinedDate = new Date(nowInit).toLocaleDateString();
+        if (!user.firstPlayedAt) user.firstPlayedAt = nowInit;
+        user.dice = Number(user.dice || 0) + starterDice;
+        if (!db.config.ownerId) db.config.ownerId = userId;
+        if (!db.config.mainGuildId && message.guild) db.config.mainGuildId = message.guild.id;
+        updateUserRank(user);
+        updatePeakRank(user);
+        await evaluateAndSyncUserBadges(userId, user, message.guild);
+        await saveUsers();
+      };
+
       if (isTester(userId)) {
         const startRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('beta_start_journey_btn').setEmoji('1572796405033214043')
@@ -608,18 +552,7 @@ client.on('messageCreate', async message => {
             return i.followUp({ content: toSmallCaps('❌ Only the command user can press this Start button!'), ephemeral: true });
           }
           pressed = true;
-          const nowInit = Date.now();
-          user.started = true;
-          user.joinedDate = new Date(nowInit).toLocaleDateString();
-          if (!user.firstPlayedAt) user.firstPlayedAt = nowInit;
-          user.dice = Number(user.dice || 0) + 50;
-          if (!db.config.ownerId) db.config.ownerId = userId;
-          if (!db.config.mainGuildId && message.guild) db.config.mainGuildId = message.guild.id;
-          updateUserRank(user);
-          updatePeakRank(user);
-          await evaluateAndSyncUserBadges(userId, user, message.guild);
-          await saveUsers();
-
+          await initProfile(50);
           await startPromptMsg.edit({
             content: toSmallCaps(`🎉 **Journey Initialized!** You have been awarded **x50 Dice** ${BETA_EMOJIS.DICE} and your Chibi RPG profile is now active.`),
             components: []
@@ -637,17 +570,7 @@ client.on('messageCreate', async message => {
         return;
       }
 
-      const nowInit = Date.now();
-      user.started = true;
-      user.joinedDate = new Date(nowInit).toLocaleDateString();
-      if (!user.firstPlayedAt) user.firstPlayedAt = nowInit;
-      user.dice = Number(user.dice || 0) + 20;
-      if (!db.config.ownerId) db.config.ownerId = userId;
-      if (!db.config.mainGuildId && message.guild) db.config.mainGuildId = message.guild.id;
-      updateUserRank(user);
-      updatePeakRank(user);
-      await evaluateAndSyncUserBadges(userId, user, message.guild);
-      await saveUsers();
+      await initProfile(20);
       return message.reply(toSmallCaps('🎉 Welcome to Chibi RPG RNG! You have been awarded 20x Dice 🎲 and your profile is initialized.'));
     }
 
@@ -657,43 +580,27 @@ client.on('messageCreate', async message => {
 
     const isAdmin = () => isOwner() || user.permissions === true;
 
-    // Admin NPC & Redeem Commands (+fnpcspawn / +fns, +redeemgive, +sredeemgive)
     if (isNpcAdminCmd && npcModule) {
-      if (!isAdmin()) {
-        return message.reply(toSmallCaps('❌ This command is for admins only!'));
-      }
+      if (!isAdmin()) return message.reply(toSmallCaps('❌ This command is for admins only!'));
       if (command === 'fnpcspawn') {
         const query = args.join(' ').trim();
         const template = query ? npcModule.findNpcTemplateByName(query) : null;
-        if (query && !template) {
-          return message.reply(toSmallCaps(`❌ Could not find NPC "${query}".`));
-        }
+        if (query && !template) return message.reply(toSmallCaps(`❌ Could not find NPC "${query}".`));
         await npcModule.spawnNpcInChannel(message.channel, currentPrefix, template || null);
         return;
       }
-      if (command === 'redeemgive' || command === 'sredeemgive') {
-        const targetUser = message.mentions.users.first();
-        if (!targetUser) {
-          return message.reply(toSmallCaps(`❌ Usage: \`${currentPrefix}${command} @user [quantity]\``));
-        }
-        const qty = Math.max(1, parseInt(args[1], 10) || 1);
-        ensureUser(targetUser.id);
-        const targetData = db.users[targetUser.id];
-        npcModule.ensureNpcUserFields(targetData);
-        if (command === 'redeemgive') {
-          targetData.redeems += qty;
-        } else {
-          targetData.shinyRedeems += qty;
-        }
-        await saveUsers();
-        return message.reply(toSmallCaps(
-          `✅ Gave **${qty}x** ${command === 'redeemgive' ? 'Redeem' : 'Shiny Redeem'} to **${targetUser.username}**!`
-        ));
-      }
+      const targetUser = message.mentions.users.first();
+      if (!targetUser) return message.reply(toSmallCaps(`❌ Usage: \`${currentPrefix}${command} @user [quantity]\``));
+      const qty = Math.max(1, parseInt(args[1], 10) || 1);
+      ensureUser(targetUser.id);
+      npcModule.ensureNpcUserFields(db.users[targetUser.id]);
+      if (command === 'redeemgive') db.users[targetUser.id].redeems += qty;
+      else db.users[targetUser.id].shinyRedeems += qty;
+      await saveUsers();
+      return message.reply(toSmallCaps(`✅ Gave **${qty}x** ${command === 'redeemgive' ? 'Redeem' : 'Shiny Redeem'} to **${targetUser.username}**!`));
     }
 
-    // NPC & Redeem Commands (+cnpc, +cget, +nrebirth, +nascend, +nsredeem/+nsr, +snsredeem/+snsr, +redeems)
-    if (isNpcCmd && npcModule && typeof npcModule.execute === 'function') {
+    if (isNpcCmd && typeof npcModule?.execute === 'function') {
       const handledByNpc = await npcModule.execute({
         command, args, message, client, userId, guildId, currentPrefix, user,
         currentMs, callerHasBetaView, rarityIconsMap, getDisplayName, saveUsers, trackPeakPoints
@@ -701,7 +608,7 @@ client.on('messageCreate', async message => {
       if (handledByNpc) return;
     }
 
-    if (economyModule && typeof economyModule.execute === 'function') {
+    if (typeof economyModule?.execute === 'function') {
       const handledByEconomy = await economyModule.execute({
         command, args, message, client, userId, guildId, currentPrefix, user,
         currentMs, callerHasBetaView, rarityIconsMap, getDisplayName, saveUsers, trackPeakPoints
@@ -710,11 +617,11 @@ client.on('messageCreate', async message => {
     }
 
     if (command === 'addtester') {
-      if (!isOwner() && !user.permissions) return message.reply(toSmallCaps('❌ Only bot owners or admins can manage testers!'));
+      if (!isAdmin()) return message.reply(toSmallCaps('❌ Only bot owners or admins can manage testers!'));
       const target = message.mentions.users.first();
       if (!target) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}addtester [@user]`));
       ensureUser(target.id);
-      if (!db.config.testers) db.config.testers = [];
+      if (!Array.isArray(db.config.testers)) db.config.testers = [];
       if (!db.config.testers.includes(target.id)) {
         db.config.testers.push(target.id);
         db.config.pendingUpdatesCount = (db.config.pendingUpdatesCount || 0) + 1;
@@ -725,10 +632,10 @@ client.on('messageCreate', async message => {
     }
 
     if (command === 'removetester') {
-      if (!isOwner() && !user.permissions) return message.reply(toSmallCaps('❌ Only bot owners or admins can manage testers!'));
+      if (!isAdmin()) return message.reply(toSmallCaps('❌ Only bot owners or admins can manage testers!'));
       const target = message.mentions.users.first();
       if (!target) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}removetester [@user]`));
-      if (db.config.testers) {
+      if (Array.isArray(db.config.testers)) {
         db.config.testers = db.config.testers.filter(id => id !== target.id);
         await saveUsers();
       }
@@ -745,8 +652,7 @@ client.on('messageCreate', async message => {
           `• \`${currentPrefix}testerfeature\` — Test unreleased experimental mechanics\n` +
           `• \`${currentPrefix}profile\` (\`${currentPrefix}p\`) — Revamped Beta Profile + Badges System\n` +
           `• \`${currentPrefix}cpromote\` (\`${currentPrefix}cp\`) / \`${currentPrefix}kick\` / \`${currentPrefix}cannounce\` / \`${currentPrefix}cmail\` / \`${currentPrefix}ceditdesc\` — Beta Clan Suite\n` +
-          `• Status: **TESTER BUILD ACTIVE** 🔬\n\n` +
-          `*Thank you for helping test and refine Chibi RPG features before public release!*`
+          `• Status: **TESTER BUILD ACTIVE** 🔬`
         ))
       );
       return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
@@ -758,38 +664,29 @@ client.on('messageCreate', async message => {
         new TextDisplayBuilder().setContent(toSmallCaps(
           `# 🧪 Active Beta Tester Features List\n\n` +
           `1. **Revamped Beta Profile (\`${currentPrefix}p\` / \`${currentPrefix}profile\`)**\n` +
-          `   • Clean User Status (Dice, Cash, Streak, Level), Best Roll, Timeplayed, Rank Stats, Badges & Collections Rarities\n` +
           `2. **Revamped Leaderboards (\`${currentPrefix}ranks\` & \`${currentPrefix}ccranks\` / \`${currentPrefix}ccr\`)**\n` +
-          `   • Clean Global & Clan leaderboards with season end timers & automatic clan rewards\n` +
           `3. **Beta Clan Commands (\`${currentPrefix}cclaninfo\`, \`${currentPrefix}cpromote\`/\`${currentPrefix}cp\`, \`${currentPrefix}kick\`, \`${currentPrefix}cannounce\`, \`${currentPrefix}cmail\`, \`${currentPrefix}ceditdesc\`)**\n` +
-          `   • Role hierarchy (Co-Leader, Officer, Deputy), member kicks, clan announcements, description & mail inbox\n` +
           `4. **Interactive Start Button (\`${currentPrefix}start\`)**\n` +
-          `   • Pressable ${BETA_EMOJIS.START_BTN} Start button awarding **x50 Dice**\n` +
-          `5. **Badge System & Owner Grant (\`${currentPrefix}admingivebadges\` / \`${currentPrefix}agb\`)**\n` +
-          `   • Obtainable, Utility & Event badges with automatic requirement unlocks`
+          `5. **Badge System & Owner Grant (\`${currentPrefix}admingivebadges\` / \`${currentPrefix}agb\`)**`
         ))
       );
       return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
     }
 
     if (command === 'admingivebadges') {
-      if (!isOwner() && !user.permissions) return message.reply(toSmallCaps('❌ Only the bot owner or admins can use this command!'));
+      if (!isAdmin()) return message.reply(toSmallCaps('❌ Only the bot owner or admins can use this command!'));
       const target = message.mentions.users.first();
-      const badgeKeyArg = args[1] ? args[1].toLowerCase() : null;
+      const badgeKeyArg = args[1]?.toLowerCase() || null;
 
       if (!target || !badgeKeyArg) {
-        const obtainableLines = formatBadgeCatalogLines('Obtainable Badges');
-        const utilityLines = formatBadgeCatalogLines('Utility Badges');
-        const eventLines = formatBadgeCatalogLines('Event Badges');
-
         const container = new ContainerBuilder().setAccentColor(0x9b59b6).addTextDisplayComponents(
           new TextDisplayBuilder().setContent(
             toSmallCaps(`# 🏅 Available Badges Catalog (\`${currentPrefix}admingivebadges\` / \`${currentPrefix}agb\`)\n\n**Usage:** \`${currentPrefix}admingivebadges [@user] [badge_key]\`\n\n**Obtainable Badges:**\n`) +
-            obtainableLines +
+            formatBadgeCatalogLines('Obtainable Badges') +
             toSmallCaps('\n\n**Utility Badges:**\n') +
-            utilityLines +
+            formatBadgeCatalogLines('Utility Badges') +
             toSmallCaps('\n\n**Event Badges:**\n') +
-            eventLines
+            formatBadgeCatalogLines('Event Badges')
           )
         );
         return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
@@ -805,21 +702,18 @@ client.on('messageCreate', async message => {
       const targetData = db.users[target.id];
       if (!Array.isArray(targetData.badges)) targetData.badges = [];
 
-      let actionText = '';
-      if (targetData.badges.includes(badgeDef.key)) {
-        targetData.badges = targetData.badges.filter(k => k !== badgeDef.key);
-        actionText = `Removed ${badgeDef.icon} **${badgeDef.name}** from <@${target.id}>.`;
-      } else {
-        targetData.badges.push(badgeDef.key);
-        actionText = `Granted ${badgeDef.icon} **${badgeDef.name}** to <@${target.id}>!`;
-      }
+      const exists = targetData.badges.includes(badgeDef.key);
+      targetData.badges = exists
+        ? targetData.badges.filter(k => k !== badgeDef.key)
+        : [...targetData.badges, badgeDef.key];
+
       await evaluateAndSyncUserBadges(target.id, targetData, message.guild);
       await saveUsers();
-      return message.reply(toSmallCaps(`✅ ${actionText}`));
+      return message.reply(toSmallCaps(`✅ ${exists ? 'Removed' : 'Granted'} ${badgeDef.icon} **${badgeDef.name}** ${exists ? 'from' : 'to'} <@${target.id}>!`));
     }
 
     if (command === 'pubnewupd') {
-      if (!isOwner() && !user.permissions) return message.reply(toSmallCaps('❌ Only the bot owner or admins can publish updates!'));
+      if (!isAdmin()) return message.reply(toSmallCaps('❌ Only the bot owner or admins can publish updates!'));
       const pendingCount = db.config.pendingUpdatesCount || 0;
       if (db.config.featuresPublished === true && pendingCount === 0) {
         return message.reply(toSmallCaps('ℹ️ There is no new code or updates to publish right now. Everything is already fully up-to-date and live for public production!'));
@@ -844,23 +738,19 @@ client.on('messageCreate', async message => {
         }
         decided = true;
         if (i.customId === 'pubnewupd_confirm_no') {
-          await confirmMsg.edit({ content: toSmallCaps('❌ Update publishing cancelled. Unreleased features remain exclusive to beta testers.'), components: [] }).catch(() => {});
-          return;
+          return confirmMsg.edit({ content: toSmallCaps('❌ Update publishing cancelled. Unreleased features remain exclusive to beta testers.'), components: [] }).catch(() => {});
         }
-        if (i.customId === 'pubnewupd_confirm_yes') {
-          db.config.featuresPublished = true;
-          db.config.pendingUpdatesCount = 0;
-          await saveUsers();
-          const container = new ContainerBuilder().setAccentColor(0x2ecc71).addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(toSmallCaps(
-              `# 🚀 New Updates Published Successfully!\n\n` +
-              `All recent tester features and updates have been automatically pushed to public production.\n` +
-              `• Status: **LIVE FOR ALL USERS** 🟢\n` +
-              `• Published by: <@${userId}>`
-            ))
-          );
-          await confirmMsg.edit({ content: '', components: [container], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
-        }
+        db.config.featuresPublished = true;
+        db.config.pendingUpdatesCount = 0;
+        await saveUsers();
+        const container = new ContainerBuilder().setAccentColor(0x2ecc71).addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(toSmallCaps(
+            `# 🚀 New Updates Published Successfully!\n\n` +
+            `All recent tester features and updates have been automatically pushed to public production.\n` +
+            `• Status: **LIVE FOR ALL USERS** 🟢\n• Published by: <@${userId}>`
+          ))
+        );
+        await confirmMsg.edit({ content: '', components: [container], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
       });
 
       pubCollector.on('end', async () => {
@@ -880,16 +770,14 @@ client.on('messageCreate', async message => {
         new TextDisplayBuilder().setContent(toSmallCaps(
           `# 👑 Owner Control Center\n\n` +
           `• \`${currentPrefix}ownerbotmaintenance\` — Toggle bot maintenance mode\n` +
-          `• \`${currentPrefix}ownersetstatus [@user] [status]\` — Set custom user game/activity status\n` +
-          `• \`${currentPrefix}addtester [@user]\` — Add beta tester\n` +
-          `• \`${currentPrefix}removetester [@user]\` — Remove beta tester\n` +
-          `• \`${currentPrefix}testerpanel\` — Open beta tester panel\n` +
-          `• \`${currentPrefix}testerfeatures\` (\`${currentPrefix}tf\`) — List beta features\n` +
+          `• \`${currentPrefix}ownersetstatus [@user] [status]\` — Set custom user status\n` +
+          `• \`${currentPrefix}addtester [@user]\` / \`${currentPrefix}removetester [@user]\` — Manage beta testers\n` +
+          `• \`${currentPrefix}testerpanel\` & \`${currentPrefix}testerfeatures\` (\`${currentPrefix}tf\`)\n` +
           `• \`${currentPrefix}admingivebadges [@user] [key]\` (\`${currentPrefix}agb\`) — Manage user badges\n` +
-          `• \`${currentPrefix}pubnewupd\` — Publish new updates to public production\n` +
-          `• \`${currentPrefix}ownerresetdata\` — Wipe all user data and reset everyone\n` +
+          `• \`${currentPrefix}pubnewupd\` — Publish updates to public production\n` +
+          `• \`${currentPrefix}ownerresetdata\` — Reset all user data\n` +
           `• \`${currentPrefix}ownersecretpanel\` — View secret system statistics\n` +
-          `• \`${currentPrefix}owneradminpermsrem\` — Revoke admin permissions from all users\n` +
+          `• \`${currentPrefix}owneradminpermsrem\` — Revoke admin permissions\n` +
           `• \`${currentPrefix}ownergivechibi [@user]\` — Gift exclusive SSRP event chibis\n` +
           `• \`${currentPrefix}adminsetclanrewards\` — Configure seasonal clan rewards\n` +
           `• \`${currentPrefix}fixadmin\` — Assign yourself as main owner & server`
@@ -915,8 +803,7 @@ client.on('messageCreate', async message => {
           `• \`${currentPrefix}adminsetnn [@user] [name]\` — Set custom user nickname\n` +
           `• \`${currentPrefix}adminclearlb\` — Clear leaderboard data\n` +
           `• \`${currentPrefix}fnpcspawn\` (\`${currentPrefix}fns\`) [name] — Force spawn NPC\n` +
-          `• \`${currentPrefix}redeemgive [@user] [qty]\` — Give NPC Redeem\n` +
-          `• \`${currentPrefix}sredeemgive [@user] [qty]\` — Give Shiny NPC Redeem\n` +
+          `• \`${currentPrefix}redeemgive [@user] [qty]\` / \`${currentPrefix}sredeemgive [@user] [qty]\`\n` +
           `• \`${currentPrefix}admingivepermission [@user]\` — Grant admin rights *(Owner only)*`
         ))
       );
@@ -927,8 +814,7 @@ client.on('messageCreate', async message => {
       if (!isOwner()) return message.reply(toSmallCaps('❌ Only the bot owner can toggle maintenance mode!'));
       db.config.maintenanceMode = !db.config.maintenanceMode;
       await saveUsers();
-      const statusText = db.config.maintenanceMode ? 'ENABLED 🔴 (Bot locked for maintenance)' : 'DISABLED 🟢 (Bot is fully operational)';
-      return message.reply(toSmallCaps(`🛠️ Maintenance mode successfully updated: ${statusText}`));
+      return message.reply(toSmallCaps(`🛠️ Maintenance mode successfully updated: ${db.config.maintenanceMode ? 'ENABLED 🔴' : 'DISABLED 🟢'}`));
     }
 
     if (command === 'ownersetstatus') {
@@ -936,7 +822,7 @@ client.on('messageCreate', async message => {
       const target = message.mentions.users.first();
       const statusText = args.slice(1).join(' ');
       if (!target || !statusText) {
-        return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}ownersetstatus [@user] [status text]\nExample: ${currentPrefix}ownersetstatus @user VALORANT`));
+        return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}ownersetstatus [@user] [status text]`));
       }
       ensureUser(target.id);
       db.users[target.id].customStatus = { text: statusText, timestamp: Date.now() };
@@ -947,11 +833,11 @@ client.on('messageCreate', async message => {
     if (command === 'adminrestoreall') {
       if (!isAdmin()) return message.reply(toSmallCaps('❌ Only administrators can restore all user data!'));
       let restoredCount = 0;
-      for (const uId of Object.keys(db.users)) {
+      for (const [uId, uData] of Object.entries(db.users)) {
         ensureUser(uId);
-        updateUserRank(db.users[uId]);
-        updatePeakRank(db.users[uId]);
-        await evaluateAndSyncUserBadges(uId, db.users[uId], message.guild);
+        updateUserRank(uData);
+        updatePeakRank(uData);
+        await evaluateAndSyncUserBadges(uId, uData, message.guild);
         restoredCount++;
       }
       await saveUsers();
@@ -963,66 +849,36 @@ client.on('messageCreate', async message => {
       const resetNow = Date.now();
       for (const uId of Object.keys(db.users)) {
         db.users[uId] = {
-          started: false,
-          joinedDate: new Date(resetNow).toLocaleDateString(),
-          firstPlayedAt: resetNow,
-          dice: 10,
-          points: 0,
-          rank: '<:unranked:1571314276071907519>',
-          clan: null,
-          customNickname: null,
-          highestSeasonRank: '<:unranked:1571314276071907519>',
-          highestSeasonPoints: 0,
-          inventory: { chibis: [], items: { spray: 0, clover: 0 } },
-          team: [null, null, null],
-          equippedChibi: null,
-          equippedDice: null,
-          bestRoll: 'None',
-          bestRollTier: 0,
-          bestRollVal: 0,
-          bestChibi: null,
-          userLevel: 1,
-          userExp: 0,
-          lastDrop: 0,
-          todayDrops: 0,
-          lastDaily: 0,
-          streak: 0,
-          permissions: (uId === db.config.ownerId ? true : false),
-          customStatus: null,
-          badges: [],
-          clanMail: [],
-          customBg: null,
-          profileBg: null,
-          profileBgTheme: 'crystal'
+          started: false, joinedDate: new Date(resetNow).toLocaleDateString(), firstPlayedAt: resetNow,
+          dice: 10, cash: 0, points: 0, rank: '<:unranked:1571314276071907519>', clan: null,
+          customNickname: null, highestSeasonRank: '<:unranked:1571314276071907519>',
+          highestSeasonPoints: 0, inventory: { chibis: [], items: { spray: 0, clover: 0 } },
+          team: [null, null, null], equippedChibi: null, equippedDice: null, bestRoll: 'None',
+          bestRollTier: 0, bestRollVal: 0, bestChibi: null, userLevel: 1, userExp: 0,
+          lastDrop: 0, todayDrops: 0, lastDaily: 0, streak: 0,
+          permissions: uId === db.config.ownerId, customStatus: null, badges: [],
+          clanMail: [], customBg: null, profileBg: null, profileBgTheme: 'crystal'
         };
       }
       db.clans = {};
       db.tradeHistories = {};
-      if (db.config.eventCrystals) db.config.eventCrystals = {};
+      db.config.eventCrystals = {};
       await saveUsers();
       return message.reply(toSmallCaps('⚠️ OWNER NOTICE: All user data, inventories, teams, and stats have been completely reset! All users must use `+start` again.'));
     }
 
     if (command === 'event') {
       if (!db.config.eventActive) return message.reply(toSmallCaps('❌ The Beta Event is currently inactive!'));
-      const crystals = db.config.eventCrystals?.[userId] || 0;
-      const eventDescription = 'Welcome to the official Chibi RPG Beta Event! Embark on thrilling adventures, challenge mysterious wandering NPCs across the realm, battle rival players in the arena, and collect exclusive rare event chibis using event crystals to claim supreme glory and build the ultimate collection!';
-
+      const crystals = db.config.eventCrystals[userId] || 0;
       const container = new ContainerBuilder().setAccentColor(0x9b59b6).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(toSmallCaps(
           `# 📦 BETA EVENT HUB & INFORMATION\n\n` +
-          `${EVENT_ICONS.TIPS} **DESCRIPTION:**\n${eventDescription}\n\n` +
+          `${EVENT_ICONS.TIPS} **DESCRIPTION:**\nWelcome to the official Chibi RPG Beta Event! Battle wandering NPCs, clash with rival players in 3v3 battles, and exchange crystals for exclusive event chibis.\n\n` +
           `-----------------------------------\n` +
           `🎯 **HOW TO PARTICIPATE:**\n` +
-          `• TYPE \`${currentPrefix}eadventure\` (OR \`${currentPrefix}ca\`) TO EXPLORE AND BATTLE WANDERING EVENT NPCS.\n` +
-          `• TYPE \`${currentPrefix}battle [@user]\` TO CLASH AGAINST OTHER PLAYERS IN 3v3 ARENA BATTLES.\n` +
-          `• TYPE \`${currentPrefix}eshop\` (OR \`${currentPrefix}es\`) TO OPEN THE EVENT SHOP AND TRADE YOUR CRYSTALS.\n\n` +
-          `💎 **HOW CAN I EARN CRYSTALS:**\n` +
-          `• BATTLING PLAYERS (\`${currentPrefix}battle\`): WINNING REWARDS YOU WITH 10–16 CRYSTALS ${EVENT_ICONS.CRYSTAL}, WHILE LOSING GRANTS 2–8 CRYSTALS.\n` +
-          `• ADVENTURE (\`${currentPrefix}eadventure\`): DEFEATING WANDERING NPCS REWARDS YOU WITH 17 CRYSTALS ${EVENT_ICONS.CRYSTAL}, OR 8 CRYSTALS IF DEFEATED.\n` +
-          `• TRIVIA (\`${currentPrefix}trivia\`): CORRECT ANSWERS AWARD BONUS POINTS AND XP.\n\n` +
-          `🎁 **HOW CAN I CLAIM & EXCHANGE MY REWARD:**\n` +
-          `• ACCUMULATE EVENT CRYSTALS AND OPEN THE EVENT SHOP USING \`${currentPrefix}eshop\`.\n\n` +
+          `• \`${currentPrefix}eadventure\` (\`${currentPrefix}ca\`) — Explore and battle wandering event NPCs\n` +
+          `• \`${currentPrefix}battle [@user]\` — Clash against other players in 3v3 arena battles\n` +
+          `• \`${currentPrefix}eshop\` (\`${currentPrefix}es\`) — Trade your crystals in the event shop\n\n` +
           `YOUR CRYSTALS: **${crystals}** ${EVENT_ICONS.CRYSTAL}`
         ))
       );
@@ -1030,7 +886,7 @@ client.on('messageCreate', async message => {
     }
 
     if (command === 'ecrystal') {
-      const crystals = db.config.eventCrystals?.[userId] || 0;
+      const crystals = db.config.eventCrystals[userId] || 0;
       return message.reply(toSmallCaps(`💎 You currently have **${crystals}** Event Crystals ${EVENT_ICONS.CRYSTAL}.`));
     }
 
@@ -1059,77 +915,55 @@ client.on('messageCreate', async message => {
           return advMsg.edit({ content: toSmallCaps(`🏃 You fled from ${randomNpc.name}. Safe travels!`), components: [] }).catch(() => {});
         }
 
-        if (i.customId === 'accept_npc_fight') {
-          const npcAtk = Math.floor(Math.random() * 36) + 10;
-          const npcHp = Math.floor(Math.random() * 1329) + 400;
-          const npcDef = Math.floor(Math.random() * 66) + 40;
-          const npcRandomChibi = EVENT_CHIBIS_POOL[Math.floor(Math.random() * EVENT_CHIBIS_POOL.length)];
+        const npcAtk = Math.floor(Math.random() * 36) + 10;
+        const npcHp = Math.floor(Math.random() * 1329) + 400;
+        const npcDef = Math.floor(Math.random() * 66) + 40;
+        const npcRandomChibi = EVENT_CHIBIS_POOL[Math.floor(Math.random() * EVENT_CHIBIS_POOL.length)];
 
-          const getTeamChibis = (u) => (u.team || [null, null, null]).map(id => {
-            if (!id) return null;
-            return u.inventory?.chibis?.find(c => (c.chibiId || c.id) === id);
-          });
-
-          const userTeam = getTeamChibis(user);
-          let userPower = 50;
-          userTeam.forEach(c => {
-            if (c) {
-              const statCfg = gameData.stats[c.rarity]?.[c.isShiny ? 'shiny' : 'normal'] || { hp: 100, atk: 20, def: 10, hpPer: 10, atkPer: 2, defPer: 1 };
-              userPower += (statCfg.hp + c.level * statCfg.hpPer) + (statCfg.atk + c.level * statCfg.atkPer) * 3;
-            }
-          });
-
-          const npcPower = (npcHp + npcAtk * 3 + npcDef * 2) * (0.85 + Math.random() * 0.3);
-          const isUserWinner = userPower >= npcPower;
-          let rewardCrystal = 0;
-          let npcDropText = '*None*';
-
-          if (!db.config.eventCrystals) db.config.eventCrystals = {};
-
-          if (isUserWinner) {
-            rewardCrystal = 17;
-            db.config.eventCrystals[userId] = (db.config.eventCrystals[userId] || 0) + rewardCrystal;
-            if (Math.random() * 100 <= 0.1) {
-              const droppedEventChibi = EVENT_CHIBIS_POOL[Math.floor(Math.random() * EVENT_CHIBIS_POOL.length)];
-              const generatedId = new mongoose.Types.ObjectId().toString();
-              if (!user.inventory.chibis) user.inventory.chibis = [];
-              user.inventory.chibis.push({
-                id: generatedId, chibiId: generatedId, name: droppedEventChibi.name, rarity: 'SSRP',
-                emoji: droppedEventChibi.emoji, isShiny: true, level: 1, exp: 0, date: new Date().toLocaleDateString()
-              });
-              npcDropText = `RECEIVED SHINY ${SHINY_ICON} ${droppedEventChibi.emoji} ${droppedEventChibi.name}`;
-            } else {
-              npcDropText = 'NO SHINY DROP (0.1% CHANCE)';
-            }
-          } else {
-            rewardCrystal = 8;
-            db.config.eventCrystals[userId] = (db.config.eventCrystals[userId] || 0) + rewardCrystal;
-            npcDropText = 'DEFEATED (NO DROP)';
+        const userTeam = (user.team || [null, null, null]).map(id => id && user.inventory?.chibis?.find(c => (c.chibiId || c.id) === id));
+        let userPower = 50;
+        for (const c of userTeam) {
+          if (c) {
+            const statCfg = gameData.stats?.[c.rarity]?.[c.isShiny ? 'shiny' : 'normal'] || { hp: 100, atk: 20, def: 10, hpPer: 10, atkPer: 2, defPer: 1 };
+            userPower += (statCfg.hp + c.level * statCfg.hpPer) + (statCfg.atk + c.level * statCfg.atkPer) * 3;
           }
-
-          const awardedExp = addExpAndLevelUp(user, userTeam.find(Boolean), 350);
-          await evaluateAndSyncUserBadges(userId, user, message.guild);
-          await saveUsers();
-
-          const hpIcon = callerHasBetaView ? BETA_EMOJIS.HP : '❤️';
-          const atkIcon = callerHasBetaView ? BETA_EMOJIS.ATK : '⚔️';
-          const defIcon = callerHasBetaView ? BETA_EMOJIS.DEF : '🛡️';
-
-          const resultContainer = new ContainerBuilder().setAccentColor(isUserWinner ? 0x2ecc71 : 0xe74c3c).addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(toSmallCaps(
-              `# ⚔️ ADVENTURE BATTLE RESULT\n\n` +
-              `OPPONENT: ${randomNpc.icon} ${randomNpc.name}\n` +
-              `NPC CHIBI: ${npcRandomChibi.emoji} ${npcRandomChibi.name}\n` +
-              `NPC STATS -> ${atkIcon} ATK: ${npcAtk} | ${hpIcon} HP: ${npcHp}\n` +
-              `${defIcon} DEF: ${npcDef}\n\n` +
-              `${isUserWinner ? '🏆 VICTORY! YOU DEFEATED THE NPC!' : '💔 DEFEATED BY THE NPC!'}\n` +
-              `💎 CRYSTALS EARNED: +${rewardCrystal} ${EVENT_ICONS.CRYSTAL}\n` +
-              `🎁 NPC DROP: ${npcDropText}\n` +
-              `✨ EXP GAINED: +${awardedExp}`
-            ))
-          );
-          await advMsg.edit({ content: '', components: [resultContainer], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
         }
+
+        const isUserWinner = userPower >= (npcHp + npcAtk * 3 + npcDef * 2) * (0.85 + Math.random() * 0.3);
+        const rewardCrystal = isUserWinner ? 17 : 8;
+        db.config.eventCrystals[userId] = (db.config.eventCrystals[userId] || 0) + rewardCrystal;
+
+        let npcDropText = isUserWinner ? 'NO SHINY DROP (0.1% CHANCE)' : 'DEFEATED (NO DROP)';
+        if (isUserWinner && Math.random() * 100 <= 0.1) {
+          const dropped = EVENT_CHIBIS_POOL[Math.floor(Math.random() * EVENT_CHIBIS_POOL.length)];
+          const generatedId = new mongoose.Types.ObjectId().toString();
+          user.inventory.chibis.push({
+            id: generatedId, chibiId: generatedId, name: dropped.name, rarity: 'SSRP',
+            emoji: dropped.emoji, isShiny: true, level: 1, exp: 0, date: new Date().toLocaleDateString()
+          });
+          npcDropText = `RECEIVED SHINY ${SHINY_ICON} ${dropped.emoji} ${dropped.name}`;
+        }
+
+        const awardedExp = addExpAndLevelUp(user, userTeam.find(Boolean), 350);
+        await evaluateAndSyncUserBadges(userId, user, message.guild);
+        await saveUsers();
+
+        const hpIcon = callerHasBetaView ? BETA_EMOJIS.HP : '❤️';
+        const atkIcon = callerHasBetaView ? BETA_EMOJIS.ATK : '⚔️';
+        const defIcon = callerHasBetaView ? BETA_EMOJIS.DEF : '🛡️';
+
+        const resultContainer = new ContainerBuilder().setAccentColor(isUserWinner ? 0x2ecc71 : 0xe74c3c).addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(toSmallCaps(
+            `# ⚔️ ADVENTURE BATTLE RESULT\n\n` +
+            `OPPONENT: ${randomNpc.icon} ${randomNpc.name}\n` +
+            `NPC CHIBI: ${npcRandomChibi.emoji} ${npcRandomChibi.name}\n` +
+            `NPC STATS -> ${atkIcon} ATK: ${npcAtk} | ${hpIcon} HP: ${npcHp} | ${defIcon} DEF: ${npcDef}\n\n` +
+            `${isUserWinner ? '🏆 VICTORY! YOU DEFEATED THE NPC!' : '💔 DEFEATED BY THE NPC!'}\n` +
+            `💎 CRYSTALS EARNED: +${rewardCrystal} ${EVENT_ICONS.CRYSTAL}\n` +
+            `🎁 NPC DROP: ${npcDropText}\n✨ EXP GAINED: +${awardedExp}`
+          ))
+        );
+        await advMsg.edit({ content: '', components: [resultContainer], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
       });
 
       collector.on('end', async () => {
@@ -1140,24 +974,23 @@ client.on('messageCreate', async message => {
 
     if (command === 'eshop') {
       if (!db.config.eventActive) return message.reply(toSmallCaps('❌ Beta Event is inactive!'));
-      const crystals = db.config.eventCrystals?.[userId] || 0;
+      const crystals = db.config.eventCrystals[userId] || 0;
       const shopItems = Object.values(db.config.eventShop || {}).sort((a, b) => a.cost - b.cost);
-      if (!shopItems.length) {
-        return message.reply(toSmallCaps('❌ There are no items available in the Event Crystal Shop right now.'));
-      }
+      if (!shopItems.length) return message.reply(toSmallCaps('❌ There are no items available in the Event Crystal Shop right now.'));
+
       const shopLines = shopItems.map((item, idx) =>
         toSmallCaps(`**[${idx + 1}]** ${item.emoji} **${item.name}** — **${item.cost.toLocaleString()}** ${EVENT_ICONS.CRYSTAL}`)
       ).join('\n');
 
-      const selectMenu = new StringSelectMenuBuilder().setCustomId('eshop_buy_select')
-        .setPlaceholder(toSmallCaps('Select an event chibi to purchase'))
-        .addOptions(shopItems.slice(0, 25).map(item => ({ label: `${item.name} (${item.cost} Crystals)`.slice(0, 100), value: item.id })));
-      const row = new ActionRowBuilder().addComponents(selectMenu);
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId('eshop_buy_select')
+          .setPlaceholder(toSmallCaps('Select an event chibi to purchase'))
+          .addOptions(shopItems.slice(0, 25).map(item => ({ label: `${item.name} (${item.cost} Crystals)`.slice(0, 100), value: item.id })))
+      );
 
       const container = new ContainerBuilder().setAccentColor(0xf1c40f).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
-          toSmallCaps(`# 💎 Beta Event Crystal Shop\n\nYour Crystal Balance: **${crystals.toLocaleString()}** ${EVENT_ICONS.CRYSTAL}\n\n*Select from the dropdown menu below to exchange your crystals for exclusive SSRP event chibis!*:\n\n`) +
-          shopLines
+          toSmallCaps(`# 💎 Beta Event Crystal Shop\n\nYour Crystal Balance: **${crystals.toLocaleString()}** ${EVENT_ICONS.CRYSTAL}\n\n`) + shopLines
         )
       );
       const shopMsg = await message.reply({ components: [container, row], flags: MessageFlags.IsComponentsV2 });
@@ -1166,27 +999,24 @@ client.on('messageCreate', async message => {
       collector.on('collect', async i => {
         if (!i.deferred && !i.replied) await i.deferUpdate().catch(() => {});
         if (i.user.id !== userId) return i.followUp({ content: toSmallCaps('Not your eshop session!'), ephemeral: true });
+        if (i.customId !== 'eshop_buy_select') return;
 
-        if (i.customId === 'eshop_buy_select') {
-          const item = db.config.eventShop[i.values[0]];
-          const userCrystals = db.config.eventCrystals?.[userId] || 0;
-          if (!item) return i.followUp({ content: toSmallCaps('❌ Item not found!'), ephemeral: true });
-          if (userCrystals < item.cost) {
-            return i.followUp({ content: toSmallCaps(`❌ You need **${item.cost}** ${EVENT_ICONS.CRYSTAL}, but you only have **${userCrystals}** ${EVENT_ICONS.CRYSTAL}!`), ephemeral: true });
-          }
-
-          if (!db.config.eventCrystals) db.config.eventCrystals = {};
-          db.config.eventCrystals[userId] -= item.cost;
-          const generatedId = new mongoose.Types.ObjectId().toString();
-          if (!user.inventory.chibis) user.inventory.chibis = [];
-          user.inventory.chibis.push({
-            id: generatedId, chibiId: generatedId, name: item.name, rarity: 'SSRP',
-            emoji: item.emoji, isShiny: false, level: 1, exp: 0, date: new Date().toLocaleDateString()
-          });
-          await evaluateAndSyncUserBadges(userId, user, message.guild);
-          await saveUsers();
-          return i.followUp({ content: toSmallCaps(`✅ Successfully purchased ${item.emoji} **${item.name}**! It has been added directly to your collections with the Event badge ${EVENT_ICONS.EVENT_BADGE}.`), ephemeral: true });
+        const item = db.config.eventShop[i.values[0]];
+        const userCrystals = db.config.eventCrystals[userId] || 0;
+        if (!item) return i.followUp({ content: toSmallCaps('❌ Item not found!'), ephemeral: true });
+        if (userCrystals < item.cost) {
+          return i.followUp({ content: toSmallCaps(`❌ You need **${item.cost}** ${EVENT_ICONS.CRYSTAL}, but you only have **${userCrystals}** ${EVENT_ICONS.CRYSTAL}!`), ephemeral: true });
         }
+
+        db.config.eventCrystals[userId] -= item.cost;
+        const generatedId = new mongoose.Types.ObjectId().toString();
+        user.inventory.chibis.push({
+          id: generatedId, chibiId: generatedId, name: item.name, rarity: 'SSRP',
+          emoji: item.emoji, isShiny: false, level: 1, exp: 0, date: new Date().toLocaleDateString()
+        });
+        await evaluateAndSyncUserBadges(userId, user, message.guild);
+        await saveUsers();
+        return i.followUp({ content: toSmallCaps(`✅ Successfully purchased ${item.emoji} **${item.name}**!`), ephemeral: true });
       });
       collector.on('end', async () => {
         await shopMsg.edit({ components: [container], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
@@ -1201,31 +1031,24 @@ client.on('messageCreate', async message => {
 
       const eventSection =
         `${rarityIconsMap['SSRP'] || '🌟'} **Super Special Rare Plus (SSRP - Beta Event)**\n` +
-        `• Cat Event: Normal 1 in 500B | Shiny 1 in 1Qa\n` +
-        `• Doge Event: Normal 1 in 1T | Shiny 1 in 20Qa\n` +
-        `• Troll Event: Normal 1 in 30T | Shiny 1 in 50Qa\n` +
-        `• Frien Event: Normal 1 in 100T | Shiny 1 in 300Qa\n` +
-        `• Seren Event: Normal 1 in 500T | Shiny 1 in 750Qa\n` +
-        `• Hellkitty Event: Normal 1 in 5Qa | Shiny 1 in 15Qi\n` +
-        `• Mezz Event: Normal 1 in 75Qa | Shiny 1 in 500Qi\n` +
-        `• Ruru Event: Normal 1 in 250Qa | Shiny 1 in 10Sx\n` +
-        `• Zoprb Event: Normal 1 in 1Qi | Shiny 1 in 100Sx\n` +
-        `• Kazerb Event: Normal 1 in 500Qi | Shiny 1 in 50Sp\n` +
+        `• Cat Event: Normal 1 in 500B | Shiny 1 in 1Qa\n• Doge Event: Normal 1 in 1T | Shiny 1 in 20Qa\n` +
+        `• Troll Event: Normal 1 in 30T | Shiny 1 in 50Qa\n• Frien Event: Normal 1 in 100T | Shiny 1 in 300Qa\n` +
+        `• Seren Event: Normal 1 in 500T | Shiny 1 in 750Qa\n• Hellkitty Event: Normal 1 in 5Qa | Shiny 1 in 15Qi\n` +
+        `• Mezz Event: Normal 1 in 75Qa | Shiny 1 in 500Qi\n• Ruru Event: Normal 1 in 250Qa | Shiny 1 in 10Sx\n` +
+        `• Zoprb Event: Normal 1 in 1Qi | Shiny 1 in 100Sx\n• Kazerb Event: Normal 1 in 500Qi | Shiny 1 in 50Sp\n` +
         `• Georb Event: Normal 1 in 10Sp | Shiny 1 in 50No`;
 
       const container = new ContainerBuilder().setAccentColor(0x3498db).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
-          toSmallCaps('# 📊 Revamped Chibi Rarities & Drop Rates\n\n') +
-          revampedLines +
-          toSmallCaps('\n\n-----------------------------------\n\n') +
-          eventSection
+          toSmallCaps('# 📊 Revamped Chibi Rarities & Drop Rates\n\n') + revampedLines +
+          toSmallCaps('\n\n-----------------------------------\n\n') + eventSection
         )
       );
       return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
     }
 
     if (command === 'customnn') {
-      const newNickname = args.join(' ');
+      const newNickname = args.join(' ').trim();
       if (!newNickname) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}customnn [nickname] (Max 12 characters)`));
       if (newNickname.length > 12) return message.reply(toSmallCaps('❌ Nickname cannot exceed 12 characters!'));
       user.customNickname = newNickname;
@@ -1234,23 +1057,21 @@ client.on('messageCreate', async message => {
     }
 
     if (command === 'profilebg') {
-      if (!Array.isArray(user.badges)) user.badges = [];
       const syncedBadges = await evaluateAndSyncUserBadges(userId, user, message.guild);
       const canUseBgPerk = hasSupporterOrNitro(user, syncedBadges);
-
       const input = args.join(' ').trim();
+
       if (!input) {
         const currentTheme = user.profileBgTheme && THEME_PALETTES[user.profileBgTheme] ? user.profileBgTheme : 'crystal';
         const availableThemes = Object.keys(THEME_PALETTES).map(k => `\`${k}\``).join(', ');
         return message.reply(toSmallCaps(
           `🎨 **Profile Background Customizer (Supporter & Nitro Perk)**\n` +
-          `Current Theme: **${currentTheme}** | Status: ${canUseBgPerk ? '✅ Unlocked' : '🔒 Locked (Requires Supporter or Nitro badge)'}\n` +
-          `Themes: ${availableThemes}\n` +
-          `Usage: \`${currentPrefix}profilebg <theme>\` or \`${currentPrefix}profilebg clear\``
+          `Current Theme: **${currentTheme}** | Status: ${canUseBgPerk ? '✅ Unlocked' : '🔒 Locked'}\n` +
+          `Themes: ${availableThemes}\nUsage: \`${currentPrefix}profilebg <theme>\` or \`${currentPrefix}profilebg clear\``
         ));
       }
 
-      if (input.toLowerCase() === 'clear' || input.toLowerCase() === 'reset') {
+      if (['clear', 'reset'].includes(input.toLowerCase())) {
         user.profileBg = null;
         user.profileBgTheme = 'crystal';
         await saveUsers();
@@ -1258,9 +1079,7 @@ client.on('messageCreate', async message => {
       }
 
       if (!canUseBgPerk) {
-        return message.reply(
-          toSmallCaps('❌ Customizing your profile background is only available for users with the **Supporter** or **Nitro** badge!')
-        );
+        return message.reply(toSmallCaps('❌ Customizing your profile background is only available for users with the **Supporter** or **Nitro** badge!'));
       }
 
       const chosenTheme = input.toLowerCase();
@@ -1276,19 +1095,13 @@ client.on('messageCreate', async message => {
     }
 
     if (command === 'setbg') {
-      if (!Array.isArray(user.badges)) user.badges = [];
       const syncedBadges = await evaluateAndSyncUserBadges(userId, user, message.guild);
-      const canUseBgPerk = hasSupporterOrNitro(user, syncedBadges);
-
-      if (!canUseBgPerk) {
-        return message.reply(
-          toSmallCaps('❌ Custom profile image backgrounds are exclusively for **Beta Supporter** and **Nitro** badge holders!')
-        );
+      if (!hasSupporterOrNitro(user, syncedBadges)) {
+        return message.reply(toSmallCaps('❌ Custom profile image backgrounds are exclusively for **Beta Supporter** and **Nitro** badge holders!'));
       }
 
       const subArg = (args[0] || '').trim().toLowerCase();
-
-      if (subArg === 'clear' || subArg === 'reset' || subArg === 'remove') {
+      if (['clear', 'reset', 'remove'].includes(subArg)) {
         user.customBg = null;
         await saveUsers();
         return message.reply(toSmallCaps('✅ Cleared your custom profile background image!'));
@@ -1296,14 +1109,10 @@ client.on('messageCreate', async message => {
 
       const downloadAttachmentAsDataUri = async (attachment) => {
         try {
-          const res = await fetch(attachment.url, {
-            headers: { 'User-Agent': 'Mozilla/5.0 DiscordBot' }
-          });
+          const res = await fetch(attachment.url, { headers: { 'User-Agent': 'Mozilla/5.0 DiscordBot' } });
           if (!res.ok) return attachment.url;
           const buf = Buffer.from(await res.arrayBuffer());
-          if (!buf.length || buf.length > 2.5 * 1024 * 1024) {
-            return attachment.url;
-          }
+          if (!buf.length || buf.length > 2.5 * 1024 * 1024) return attachment.url;
           let mime = (res.headers.get('content-type') || attachment.contentType || '').split(';')[0].trim().toLowerCase();
           if (!mime.startsWith('image/')) {
             const extMatch = (attachment.name || attachment.url || '').match(/\.(png|jpe?g|webp|gif)(\?.*)?$/i);
@@ -1318,13 +1127,9 @@ client.on('messageCreate', async message => {
 
       const resolveImageFromAttachmentOrUrl = async (attachment, rawUrl) => {
         if (attachment) {
-          const isImageAttachment = attachment.contentType?.startsWith('image/');
-          const hasImageExt = /\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(attachment.name || attachment.url || '');
-          if (!isImageAttachment && !hasImageExt) {
-            return { error: toSmallCaps('❌ Please upload a valid image file (`.png`, `.jpg`, `.jpeg`, `.webp`, or `.gif`).') };
-          }
-          const persistedSource = await downloadAttachmentAsDataUri(attachment);
-          return { url: persistedSource };
+          const isImage = attachment.contentType?.startsWith('image/') || /\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(attachment.name || attachment.url || '');
+          if (!isImage) return { error: toSmallCaps('❌ Please upload a valid image file (`.png`, `.jpg`, `.jpeg`, `.webp`, or `.gif`).') };
+          return { url: await downloadAttachmentAsDataUri(attachment) };
         }
 
         let parsedUrl;
@@ -1334,20 +1139,15 @@ client.on('messageCreate', async message => {
           return { error: toSmallCaps('❌ Please provide a valid image URL (`https://...`), attach an image, or click **Upload File**!') };
         }
 
-        if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+        if (!['https:', 'http:'].includes(parsedUrl.protocol)) {
           return { error: toSmallCaps('❌ Image URL must start with `http://` or `https://`.') };
         }
 
         let finalImageUrl = parsedUrl.toString();
-        const hasImageExt = /\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(parsedUrl.pathname);
-
-        if (!hasImageExt) {
+        if (!/\.(png|jpe?g|webp|gif)(\?.*)?$/i.test(parsedUrl.pathname)) {
           try {
-            const pageRes = await fetch(finalImageUrl, {
-              headers: { 'User-Agent': 'Mozilla/5.0' }
-            });
+            const pageRes = await fetch(finalImageUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
             const contentType = pageRes.headers.get('content-type') || '';
-
             if (contentType.startsWith('image/')) {
               finalImageUrl = pageRes.url || finalImageUrl;
             } else {
@@ -1356,29 +1156,23 @@ client.on('messageCreate', async message => {
                 html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
                 html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i) ||
                 html.match(/https:\/\/i\.ibb\.co\/[^\s"'<>)]+\.(?:png|jpe?g|webp|gif)/i);
-
               const extractedUrl = ogMatch ? (ogMatch[1] || ogMatch[0]).trim() : null;
               if (!extractedUrl) {
-                return { error: toSmallCaps('❌ Could not find a direct image at that link. Use a direct `.png`, `.jpg`, `.jpeg`, `.webp`, or `.gif` URL or click **Upload File**!') };
+                return { error: toSmallCaps('❌ Could not find a direct image at that link. Use a direct image URL or click **Upload File**!') };
               }
               finalImageUrl = extractedUrl;
             }
           } catch {
-            return { error: toSmallCaps('❌ Could not load that link. Use a direct `.png`, `.jpg`, `.jpeg`, `.webp`, or `.gif` URL or click **Upload File**!') };
+            return { error: toSmallCaps('❌ Could not load that link. Use a direct image URL or click **Upload File**!') };
           }
         }
-
         return { url: finalImageUrl };
       };
 
       const attachPreviewButtonToMessage = async (targetMsg) => {
         const previewRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('setbg_preview_card_btn')
-            .setLabel(toSmallCaps('Preview Card'))
-            .setStyle(ButtonStyle.Success)
+          new ButtonBuilder().setCustomId('setbg_preview_card_btn').setLabel(toSmallCaps('Preview Card')).setStyle(ButtonStyle.Success)
         );
-
         await targetMsg.edit({
           content: toSmallCaps(`✅ Custom profile background saved! Click **Preview Card** below or run \`${currentPrefix}p\`.`),
           components: [previewRow]
@@ -1386,7 +1180,6 @@ client.on('messageCreate', async message => {
 
         const previewCollector = targetMsg.createMessageComponentCollector({ time: 60000, max: 1 });
         let previewed = false;
-
         previewCollector.on('collect', async pi => {
           if (!pi.deferred && !pi.replied) await pi.deferUpdate().catch(() => {});
           if (pi.user.id !== userId) {
@@ -1397,20 +1190,15 @@ client.on('messageCreate', async message => {
           const cardAtt = await buildProfileAttachmentForUser(userId, message.author, syncedBadges);
           await message.channel.send({ files: [cardAtt] }).catch(() => {});
         });
-
         previewCollector.on('end', async () => {
-          if (!previewed) {
-            await targetMsg.edit({ components: [] }).catch(() => {});
-          }
+          if (!previewed) await targetMsg.edit({ components: [] }).catch(() => {});
         });
       };
 
       const directAttachment = message.attachments?.first();
       if (directAttachment || subArg) {
         const resolved = await resolveImageFromAttachmentOrUrl(directAttachment, args[0]?.trim());
-        if (resolved.error) {
-          return message.reply(resolved.error);
-        }
+        if (resolved.error) return message.reply(resolved.error);
         user.customBg = resolved.url;
         await saveUsers();
         const savedMsg = await message.reply(toSmallCaps('✅ Saving custom profile background...'));
@@ -1419,21 +1207,13 @@ client.on('messageCreate', async message => {
       }
 
       const uploadRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId('setbg_upload_file_btn')
-          .setLabel(toSmallCaps('Upload File'))
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId('setbg_clear_btn')
-          .setLabel(toSmallCaps('Clear BG'))
-          .setStyle(ButtonStyle.Secondary)
+        new ButtonBuilder().setCustomId('setbg_upload_file_btn').setLabel(toSmallCaps('Upload File')).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('setbg_clear_btn').setLabel(toSmallCaps('Clear BG')).setStyle(ButtonStyle.Secondary)
       );
-
       const promptMsg = await message.reply({
         content: toSmallCaps(
           `🖼️ **Custom Profile Background (Supporter & Nitro Perk)**\n` +
-          `Current BG: ${user.customBg ? 'Set ✅' : 'None'}\n` +
-          `Click **Upload File** below, attach an image with \`${currentPrefix}setbg\`, or pass an image URL.`
+          `Current BG: ${user.customBg ? 'Set ✅' : 'None'}\nClick **Upload File** below, attach an image with \`${currentPrefix}setbg\`, or pass an image URL.`
         ),
         components: [uploadRow]
       });
@@ -1451,62 +1231,43 @@ client.on('messageCreate', async message => {
         if (i.customId === 'setbg_clear_btn') {
           user.customBg = null;
           await saveUsers();
-          await promptMsg.edit({
-            content: toSmallCaps('✅ Cleared your custom profile background image!'),
-            components: []
-          }).catch(() => {});
-          return;
+          return promptMsg.edit({ content: toSmallCaps('✅ Cleared your custom profile background image!'), components: [] }).catch(() => {});
         }
 
-        if (i.customId === 'setbg_upload_file_btn') {
-          await promptMsg.edit({
-            content: toSmallCaps('📤 **Upload File Mode Active:** Please send or attach your background image in this channel within **30 seconds** (or type `cancel`).'),
-            components: []
-          }).catch(() => {});
+        await promptMsg.edit({
+          content: toSmallCaps('📤 **Upload File Mode Active:** Please send or attach your background image in this channel within **30 seconds** (or type `cancel`).'),
+          components: []
+        }).catch(() => {});
 
-          const msgCollector = message.channel.createMessageCollector({
-            filter: m => m.author.id === userId && (m.attachments.size > 0 || m.content.trim().toLowerCase() === 'cancel'),
-            time: 30000,
-            max: 1
-          });
+        const msgCollector = message.channel.createMessageCollector({
+          filter: m => m.author.id === userId && (m.attachments.size > 0 || m.content.trim().toLowerCase() === 'cancel'),
+          time: 30000, max: 1
+        });
+        let received = false;
 
-          let received = false;
-
-          msgCollector.on('collect', async m => {
-            received = true;
-            if (m.content.trim().toLowerCase() === 'cancel') {
-              await m.delete().catch(() => {});
-              return promptMsg.edit({ content: toSmallCaps('❌ Background upload cancelled.'), components: [] }).catch(() => {});
-            }
-
-            const uploadedAtt = m.attachments.first();
-            const resolved = await resolveImageFromAttachmentOrUrl(uploadedAtt, null);
+        msgCollector.on('collect', async m => {
+          received = true;
+          if (m.content.trim().toLowerCase() === 'cancel') {
             await m.delete().catch(() => {});
+            return promptMsg.edit({ content: toSmallCaps('❌ Background upload cancelled.'), components: [] }).catch(() => {});
+          }
+          const resolved = await resolveImageFromAttachmentOrUrl(m.attachments.first(), null);
+          await m.delete().catch(() => {});
+          if (resolved.error) return promptMsg.edit({ content: resolved.error, components: [] }).catch(() => {});
+          user.customBg = resolved.url;
+          await saveUsers();
+          await attachPreviewButtonToMessage(promptMsg);
+        });
 
-            if (resolved.error) {
-              return promptMsg.edit({ content: resolved.error, components: [] }).catch(() => {});
-            }
-
-            user.customBg = resolved.url;
-            await saveUsers();
-            await attachPreviewButtonToMessage(promptMsg);
-          });
-
-          msgCollector.on('end', async () => {
-            if (!received) {
-              await promptMsg.edit({
-                content: toSmallCaps(`⏳ Upload timed out. Run \`${currentPrefix}setbg\` again to try once more.`),
-                components: []
-              }).catch(() => {});
-            }
-          });
-        }
+        msgCollector.on('end', async () => {
+          if (!received) {
+            await promptMsg.edit({ content: toSmallCaps(`⏳ Upload timed out. Run \`${currentPrefix}setbg\` again to try once more.`), components: [] }).catch(() => {});
+          }
+        });
       });
 
       btnCollector.on('end', async () => {
-        if (!clicked) {
-          await promptMsg.edit({ components: [] }).catch(() => {});
-        }
+        if (!clicked) await promptMsg.edit({ components: [] }).catch(() => {});
       });
       return;
     }
@@ -1514,17 +1275,14 @@ client.on('messageCreate', async message => {
     if (command === 'seasons') {
       const currentSeasonNum = db.config.seasonNumber || 1;
       const currentSeasonData = SEASON_LIST[currentSeasonNum] || { name: `Season ${currentSeasonNum}`, start: 'Active' };
-      const timeRemainingMs = Math.max(0, (db.config.seasonExpires || Date.now()) - Date.now());
-      const seasonTimerStr = formatTimeRemaining(timeRemainingMs);
-      const seasonLines = Object.entries(SEASON_LIST).map(([num, s]) => {
-        const activeMarker = parseInt(num, 10) === currentSeasonNum ? ' 🟢 (Active)' : '';
-        return toSmallCaps(`• ${s.name}${activeMarker}\n  Begin In: ${s.start}`);
-      }).join('\n\n');
+      const seasonTimerStr = formatTimeRemaining(Math.max(0, (db.config.seasonExpires || Date.now()) - Date.now()));
+      const seasonLines = Object.entries(SEASON_LIST).map(([num, s]) =>
+        toSmallCaps(`• ${s.name}${parseInt(num, 10) === currentSeasonNum ? ' 🟢 (Active)' : ''}\n  Begin In: ${s.start}`)
+      ).join('\n\n');
 
       const container = new ContainerBuilder().setAccentColor(0x3498db).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
-          toSmallCaps(`# 📅 Chibi RPG Seasons\n\nCurrent Active: ${currentSeasonData.name}\nTime Until Reset: ${seasonTimerStr}\n\n-----------------------------------\n\n`) +
-          seasonLines
+          toSmallCaps(`# 📅 Chibi RPG Seasons\n\nCurrent Active: ${currentSeasonData.name}\nTime Until Reset: ${seasonTimerStr}\n\n-----------------------------------\n\n`) + seasonLines
         )
       );
       return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
@@ -1532,15 +1290,12 @@ client.on('messageCreate', async message => {
 
     if (command === 'higheststats') {
       updatePeakRank(user);
-      const peakRank = user.highestSeasonRank || '<:unranked:1571314276071907519>';
-      const peakPoints = user.highestSeasonPoints || 0;
       const displayName = user.customNickname || message.author.username;
-
       const container = new ContainerBuilder().setAccentColor(0x9b59b6).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
           toSmallCaps(`# 🏆 ${displayName}'s Highest Stats (Last Season)\n\nHighest Rank Icon: `) +
-          `${peakRank}` +
-          toSmallCaps(`\nHighest Points Reached: ${peakPoints.toLocaleString()} Points\n\n*Stats snapshotted from previous competitive season.*`)
+          `${user.highestSeasonRank || '<:unranked:1571314276071907519>'}` +
+          toSmallCaps(`\nHighest Points Reached: ${(user.highestSeasonPoints || 0).toLocaleString()} Points\n\n*Stats snapshotted from previous competitive season.*`)
         )
       );
       return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
@@ -1579,16 +1334,14 @@ client.on('messageCreate', async message => {
     }
 
     if (command === 'status') {
-      const ping = client.ws.ping;
       const uptimeSec = Math.floor(client.uptime / 1000);
       const hours = Math.floor(uptimeSec / 3600);
       const minutes = Math.floor((uptimeSec % 3600) / 60);
       const seconds = uptimeSec % 60;
-
       const container = new ContainerBuilder().setAccentColor(0x3498db).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(toSmallCaps(
           `# 🤖 Bot System Status & Info\n\n` +
-          `📶 Latency / Ping: ${ping}ms\n` +
+          `📶 Latency / Ping: ${client.ws.ping}ms\n` +
           `⏱️ Uptime: ${hours}h ${minutes}m ${seconds}s\n` +
           `🌐 Connected Servers: ${client.guilds.cache.size} Servers\n` +
           `💻 Runtime: Node.js (Discord.js v14 - Components V2)\n` +
@@ -1600,51 +1353,37 @@ client.on('messageCreate', async message => {
 
     if (command === 'slot') {
       const bet = parseInt(args[0], 10);
-      if (isNaN(bet) || bet <= 0) {
-        return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}slot [bet_amount] (e.g. ${currentPrefix}slot 5)`));
-      }
-      if (user.dice < bet) {
-        return message.reply(toSmallCaps(`❌ You don't have enough dice! You have ${user.dice} 🎲, but your bet is ${bet} 🎲.`));
-      }
+      if (isNaN(bet) || bet <= 0) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}slot [bet_amount] (e.g. ${currentPrefix}slot 5)`));
+      if (user.dice < bet) return message.reply(toSmallCaps(`❌ You don't have enough dice! You have ${user.dice} 🎲, but your bet is ${bet} 🎲.`));
+
       user.dice -= bet;
       await saveUsers();
 
-      let availableChibiEmojis = ['📦', '✨', '⭐', '🌟', '💎', '🔥', '💖'];
-      if (user.inventory && user.inventory.chibis && user.inventory.chibis.length > 0) {
-        availableChibiEmojis = Array.from(new Set(user.inventory.chibis.map(c => c.emoji || '📦')));
-      }
-      const getRandomChibiSymbol = () => availableChibiEmojis[Math.floor(Math.random() * availableChibiEmojis.length)];
+      const availableChibiEmojis = user.inventory?.chibis?.length
+        ? Array.from(new Set(user.inventory.chibis.map(c => c.emoji || '📦')))
+        : ['📦', '✨', '⭐', '🌟', '💎', '🔥', '💖'];
+      const spinSymbol = () => availableChibiEmojis[Math.floor(Math.random() * availableChibiEmojis.length)];
 
-      const slotMsg = await message.reply({
-        content: toSmallCaps(`🎰 Spinning Chibi Slot Machine for ${bet} 🎲...\n| 🔄 | 🔄 | 🔄 |`)
-      });
-
+      const slotMsg = await message.reply({ content: toSmallCaps(`🎰 Spinning Chibi Slot Machine for ${bet} 🎲...\n| 🔄 | 🔄 | 🔄 |`) });
       for (let step = 0; step < 3; step++) {
-        await new Promise(resolve => setTimeout(resolve, 600));
-        await slotMsg.edit({
-          content: toSmallCaps(`🎰 Spinning...\n| ${getRandomChibiSymbol()} | ${getRandomChibiSymbol()} | ${getRandomChibiSymbol()} |`)
-        }).catch(() => {});
+        await new Promise(r => setTimeout(r, 600));
+        await slotMsg.edit({ content: toSmallCaps(`🎰 Spinning...\n| ${spinSymbol()} | ${spinSymbol()} | ${spinSymbol()} |`) }).catch(() => {});
       }
 
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const final1 = getRandomChibiSymbol();
-      const final2 = getRandomChibiSymbol();
-      const final3 = getRandomChibiSymbol();
-
+      await new Promise(r => setTimeout(r, 800));
+      const [s1, s2, s3] = [spinSymbol(), spinSymbol(), spinSymbol()];
       let payoutMultiplier = 0;
       let pointsWon = 0;
-      let resultText = '';
+      let resultText = toSmallCaps('❌ No matching chibis! Better luck next time!');
 
-      if (final1 === final2 && final2 === final3) {
+      if (s1 === s2 && s2 === s3) {
         payoutMultiplier = 10;
         pointsWon = 25;
-        resultText = toSmallCaps(`🎉 CHIBI JACKPOT! TRIPLE MATCH (${final1})! (+10x Dice, +${pointsWon} Points!) 🎉`);
-      } else if (final1 === final2 || final2 === final3 || final1 === final3) {
+        resultText = toSmallCaps(`🎉 CHIBI JACKPOT! TRIPLE MATCH (${s1})! (+10x Dice, +${pointsWon} Points!) 🎉`);
+      } else if (s1 === s2 || s2 === s3 || s1 === s3) {
         payoutMultiplier = 2;
         pointsWon = 10;
         resultText = toSmallCaps(`✨ Partial Chibi Match! (+2x Dice, +${pointsWon} Points!) ✨`);
-      } else {
-        resultText = toSmallCaps('❌ No matching chibis! Better luck next time!');
       }
 
       const winnings = Math.round(bet * payoutMultiplier);
@@ -1656,7 +1395,7 @@ client.on('messageCreate', async message => {
 
       const container = new ContainerBuilder().setAccentColor(payoutMultiplier > 0 ? 0xf1c40f : 0xe74c3c).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(toSmallCaps(
-          `# 🎰 Chibi Slot Machine Results\n\n| ${final1} | ${final2} | ${final3} |\n\n` +
+          `# 🎰 Chibi Slot Machine Results\n\n| ${s1} | ${s2} | ${s3} |\n\n` +
           `${resultText}\n💰 Dice Payout: +${winnings} 🎲 | 🏆 Points Gained: +${pointsWon} Pts\n` +
           `🎲 Total Dice: ${user.dice} | 🏆 Total Points: ${user.points}`
         ))
@@ -1667,20 +1406,14 @@ client.on('messageCreate', async message => {
     if (command === 'daily') {
       const twentyFourHours = 24 * 60 * 60 * 1000;
       const fortyEightHours = 48 * 60 * 60 * 1000;
-      if (currentMs - user.lastDaily < twentyFourHours) {
+      if (currentMs - (user.lastDaily || 0) < twentyFourHours) {
         const remainingTime = Math.ceil((twentyFourHours - (currentMs - user.lastDaily)) / 1000 / 60);
         return message.reply(toSmallCaps(`⏳ You have already claimed your daily reward! Please wait another ${remainingTime} minutes.`));
       }
-      if (!user.lastDaily || currentMs - user.lastDaily > fortyEightHours) user.streak = 1;
-      else user.streak = (user.streak || 0) + 1;
-
+      user.streak = (!user.lastDaily || currentMs - user.lastDaily > fortyEightHours) ? 1 : (user.streak || 0) + 1;
       user.lastDaily = currentMs;
-      let multiplier = 1;
-      if (user.streak >= 100) multiplier = 5;
-      else if (user.streak >= 50) multiplier = 3;
-      else if (user.streak >= 10) multiplier = 2;
-
-      const rewardDice = 1 * multiplier;
+      const multiplier = user.streak >= 100 ? 5 : user.streak >= 50 ? 3 : user.streak >= 10 ? 2 : 1;
+      const rewardDice = multiplier;
       user.dice = Number(user.dice || 0) + rewardDice;
       updateUserRank(user);
       await saveUsers();
@@ -1688,13 +1421,10 @@ client.on('messageCreate', async message => {
     }
 
     if (command === 'roll') {
-      const qty = Math.min(parseInt(args[0], 10) || 1, gameData.settings.maxRollQuantity);
-      const boost = args[1] ? args[1].toLowerCase() : null;
+      const qty = Math.min(Math.max(1, parseInt(args[0], 10) || 1), gameData.settings.maxRollQuantity);
+      const boost = args[1]?.toLowerCase() || null;
 
-      if (qty < 1) return message.reply(toSmallCaps('❌ Quantity must be at least 1.'));
-      if (user.dice < qty) {
-        return message.reply(toSmallCaps(`❌ You don't have enough dice! You need ${qty} 🎲, but you have ${user.dice} 🎲.`));
-      }
+      if (user.dice < qty) return message.reply(toSmallCaps(`❌ You don't have enough dice! You need ${qty} 🎲, but you have ${user.dice} 🎲.`));
       if (!user.inventory.items) user.inventory.items = { spray: 0, clover: 0 };
 
       if (boost === 'spray') {
@@ -1707,30 +1437,23 @@ client.on('messageCreate', async message => {
 
       user.dice = Number(user.dice || 0) - qty;
       const resultsSummary = [];
-      let activeLuckMultiplier = db.config.globalLuckMultiplier || 1.0;
-      if (boost === 'spray') activeLuckMultiplier *= 1.5;
-
+      const activeLuckMultiplier = (db.config.globalLuckMultiplier || 1.0) * (boost === 'spray' ? 1.5 : 1.0);
       const shinyBoostMultiplier = boost === 'spray' ? 1.15 : 1.0;
 
       let totalExpGained = 0;
-      const primaryChibi = user.inventory.chibis.find(c => (c.chibiId || c.id) === (user.team[0] || user.equippedChibi));
+      const primaryChibi = user.inventory.chibis.find(c => (c.chibiId || c.id) === (user.team?.[0] || user.equippedChibi));
 
       for (let i = 0; i < qty; i++) {
-        const adjustedRarities = REVAMPED_RARITY_CONFIG.map(r => {
-          const isCommon = r.key === 'C';
-          const effectiveNormalPct = isCommon ? r.normalPct : r.normalPct * activeLuckMultiplier;
-          const effectiveShinyPct = Math.min(100, r.shinyPct * shinyBoostMultiplier);
-          return {
-            ...r,
-            effectiveNormalPct,
-            effectiveShinyPct
-          };
-        });
+        const adjusted = REVAMPED_RARITY_CONFIG.map(r => ({
+          ...r,
+          effectiveNormalPct: r.key === 'C' ? r.normalPct : r.normalPct * activeLuckMultiplier,
+          effectiveShinyPct: Math.min(100, r.shinyPct * shinyBoostMultiplier)
+        }));
 
-        const totalWeight = adjustedRarities.reduce((sum, r) => sum + r.effectiveNormalPct, 0);
+        const totalWeight = adjusted.reduce((sum, r) => sum + r.effectiveNormalPct, 0);
         let randW = Math.random() * totalWeight;
-        let chosenRarityObj = adjustedRarities[0];
-        for (const r of adjustedRarities) {
+        let chosenRarityObj = adjusted[0];
+        for (const r of adjusted) {
           if (randW < r.effectiveNormalPct) {
             chosenRarityObj = r;
             break;
@@ -1739,65 +1462,45 @@ client.on('messageCreate', async message => {
         }
 
         const matchingChibis = (gameData.chibis || []).filter(c => c.rarity === chosenRarityObj.key);
-        const fallbackPool = (gameData.chibis && gameData.chibis.length > 0)
-          ? gameData.chibis
-          : [{ name: `${chosenRarityObj.label} Chibi`, rarity: chosenRarityObj.key, emoji: chosenRarityObj.emoji, odds: `1 in ${Math.max(1, Math.round(100 / Math.max(0.0001, chosenRarityObj.normalPct)))}`, shinyOdds: `1 in ${Math.max(1, Math.round(100 / Math.max(0.0001, chosenRarityObj.shinyPct)))}` }];
-        const chibiTemplate = matchingChibis.length > 0
+        const template = matchingChibis.length
           ? matchingChibis[Math.floor(Math.random() * matchingChibis.length)]
           : {
-              ...fallbackPool[Math.floor(Math.random() * fallbackPool.length)],
-              name: `${chosenRarityObj.label} ${fallbackPool[0].name}`,
+              name: `${chosenRarityObj.label} Chibi`,
               rarity: chosenRarityObj.key,
-              emoji: chosenRarityObj.emoji
+              emoji: chosenRarityObj.emoji,
+              odds: `1 in ${Math.max(1, Math.round(100 / Math.max(0.0001, chosenRarityObj.normalPct)))}`
             };
 
-        const normalVal = parseOddsNumber(chibiTemplate.odds);
+        const normalVal = parseOddsNumber(template.odds);
         const isShiny = (Math.random() * 100) < chosenRarityObj.effectiveShinyPct;
 
         const pushChibi = () => {
           const generatedId = new mongoose.Types.ObjectId().toString();
           user.inventory.chibis.push({
-            id: generatedId,
-            chibiId: generatedId,
-            name: chibiTemplate.name,
-            rarity: chosenRarityObj.key,
-            emoji: chibiTemplate.emoji || chosenRarityObj.emoji,
-            isShiny,
-            level: 1,
-            exp: 0,
-            date: new Date().toLocaleDateString()
+            id: generatedId, chibiId: generatedId, name: template.name,
+            rarity: chosenRarityObj.key, emoji: template.emoji || chosenRarityObj.emoji,
+            isShiny, level: 1, exp: 0, date: new Date().toLocaleDateString()
           });
-          return generatedId;
         };
 
         pushChibi();
-        resultsSummary.push({
-          chibi: { ...chibiTemplate, rarity: chosenRarityObj.key, emoji: chibiTemplate.emoji || chosenRarityObj.emoji },
-          isShiny
-        });
+        resultsSummary.push({ chibi: template, rarityKey: chosenRarityObj.key, isShiny, duplicated: false });
 
         if (boost === 'clover' && Math.random() < 0.5) {
           pushChibi();
-          resultsSummary.push({
-            chibi: { ...chibiTemplate, rarity: chosenRarityObj.key, emoji: chibiTemplate.emoji || chosenRarityObj.emoji },
-            isShiny,
-            duplicated: true
-          });
+          resultsSummary.push({ chibi: template, rarityKey: chosenRarityObj.key, isShiny, duplicated: true });
         }
 
         const baseExpRoll = isShiny ? Math.floor(Math.random() * 251) + 50 : Math.floor(Math.random() * 141) + 10;
         totalExpGained += addExpAndLevelUp(user, primaryChibi, baseExpRoll);
 
         const currentTier = REVAMPED_RARITY_TIER[chosenRarityObj.key] || RARITY_HIERARCHY[chosenRarityObj.key] || 1;
-        const savedTier = user.bestRollTier || 0;
-        const currentRollVal = isShiny ? (normalVal * 10) : normalVal;
-        const savedRollVal = user.bestRollVal || 0;
-
-        if (currentTier > savedTier || (currentTier === savedTier && currentRollVal > savedRollVal)) {
+        const currentRollVal = isShiny ? normalVal * 10 : normalVal;
+        if (currentTier > (user.bestRollTier || 0) || (currentTier === (user.bestRollTier || 0) && currentRollVal > (user.bestRollVal || 0))) {
           user.bestRollTier = currentTier;
           user.bestRollVal = currentRollVal;
           user.bestRoll = isShiny ? `${chosenRarityObj.shinyPct}% Shiny` : `${chosenRarityObj.normalPct}%`;
-          user.bestChibi = `${rarityIconsMap[chosenRarityObj.key]} ${chibiTemplate.emoji || chosenRarityObj.emoji} ${chibiTemplate.name} ${isShiny ? SHINY_ICON : ''}`;
+          user.bestChibi = `${rarityIconsMap[chosenRarityObj.key]} ${template.emoji || chosenRarityObj.emoji} ${template.name} ${isShiny ? SHINY_ICON : ''}`;
         }
       }
 
@@ -1810,7 +1513,7 @@ client.on('messageCreate', async message => {
       const container = new ContainerBuilder().setAccentColor(0x57f287).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
           toSmallCaps(`# ${diceIcon} Chibi Roll Results\n\n`) +
-          resultsSummary.map(r => `${rarityIconsMap[r.chibi.rarity] || REVAMPED_RARITY_ICONS[r.chibi.rarity] || '📦'} ${r.chibi.emoji} **${r.chibi.name}** ${r.isShiny ? SHINY_ICON : ''} ${r.duplicated ? '(🍀 Duplicated!)' : ''}`).join('\n') +
+          resultsSummary.map(r => `${rarityIconsMap[r.rarityKey] || '📦'} ${r.chibi.emoji} **${r.chibi.name}** ${r.isShiny ? SHINY_ICON : ''} ${r.duplicated ? '(🍀 Duplicated!)' : ''}`).join('\n') +
           toSmallCaps(`\n\n✨ Gained +${totalExpGained} EXP!`) + luckNotice +
           toSmallCaps(`\n${diceIcon} Remaining Dice: ${user.dice}`)
         )
@@ -1820,7 +1523,7 @@ client.on('messageCreate', async message => {
 
     if (command === 'drop') {
       const cooldownMs = gameData.settings.dropCooldownSeconds * 1000;
-      if (currentMs - user.lastDrop < cooldownMs) {
+      if (currentMs - (user.lastDrop || 0) < cooldownMs) {
         const timeLeft = Math.ceil((cooldownMs - (currentMs - user.lastDrop)) / 1000);
         return message.reply(toSmallCaps(`⏳ Please wait ${timeLeft} more seconds before claiming your next Chibi Drop!`));
       }
@@ -1847,18 +1550,15 @@ client.on('messageCreate', async message => {
     }
 
     if (command === 'inventory') {
-      if (!user.inventory.items) user.inventory.items = { spray: 0, clover: 0 };
-      const sprays = user.inventory.items.spray || 0;
-      const clovers = user.inventory.items.clover || 0;
+      const sprays = user.inventory?.items?.spray || 0;
+      const clovers = user.inventory?.items?.clover || 0;
       const displayName = user.customNickname || message.author.username;
       const diceIcon = callerHasBetaView ? BETA_EMOJIS.DICE : '🎲';
 
       const container = new ContainerBuilder().setAccentColor(0x3498db).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(toSmallCaps(
           `# 🎒 ${displayName}'s Inventory\n\n` +
-          `${diceIcon} Dice: ${user.dice || 0}\n` +
-          `🧴 Spray Boosts: ${sprays} Uses\n` +
-          `🍀 Clover Boosts: ${clovers} Uses\n\n` +
+          `${diceIcon} Dice: ${user.dice || 0}\n🧴 Spray Boosts: ${sprays} Uses\n🍀 Clover Boosts: ${clovers} Uses\n\n` +
           `*Note: Chibis are stored in your collections (${currentPrefix}collections).*`
         ))
       );
@@ -1866,7 +1566,7 @@ client.on('messageCreate', async message => {
     }
 
     if (command === 'collections') {
-      if (!user.inventory || !user.inventory.chibis || user.inventory.chibis.length === 0) {
+      if (!user.inventory?.chibis?.length) {
         return message.reply(toSmallCaps(`📖 Your collection is empty! Use ${currentPrefix}roll to summon chibis.`));
       }
       let sortBy = 'rarity';
@@ -1875,17 +1575,17 @@ client.on('messageCreate', async message => {
 
       const getGroupedEntries = () => {
         const grouped = {};
-        user.inventory.chibis.forEach(c => {
+        for (const c of user.inventory.chibis) {
           const key = `${c.rarity}_${c.name}_${c.isShiny ? 'shiny' : 'normal'}`;
           const uniqueId = c.chibiId || c.id;
           if (!grouped[key]) {
             grouped[key] = {
               rarity: c.rarity, emoji: c.emoji || '✨', name: c.name, isShiny: c.isShiny,
-              date: c.date || 'Unknown Date', count: 0, firstId: uniqueId ? uniqueId.slice(-6) : 'unknown'
+              count: 0, firstId: uniqueId ? uniqueId.slice(-6) : 'unknown'
             };
           }
           grouped[key].count++;
-        });
+        }
         const entries = Object.values(grouped);
         const rarityRank = { SSRP: 0, UGMR: 1, USRR: 2, STR: 3, UTR: 4, SRR: 5, SR: 6, R: 7, U: 8, C: 9 };
         if (sortBy === 'rarity') entries.sort((a, b) => (rarityRank[a.rarity] || 99) - (rarityRank[b.rarity] || 99));
@@ -1896,25 +1596,24 @@ client.on('messageCreate', async message => {
       const renderColContainer = (page) => {
         const entries = getGroupedEntries();
         const totalPages = Math.max(1, Math.ceil(entries.length / itemsPerPage));
-        if (page >= totalPages) page = totalPages - 1;
-        const start = page * itemsPerPage;
-        const pageItems = entries.slice(start, start + itemsPerPage);
+        const safePage = Math.min(page, totalPages - 1);
+        const pageItems = entries.slice(safePage * itemsPerPage, (safePage + 1) * itemsPerPage);
         const formatted = pageItems.map((e, idx) => {
           const badgeIcon = e.rarity === 'SSRP' ? ` ${EVENT_ICONS.EVENT_BADGE}` : '';
           const shinyIconPart = e.isShiny ? ` ${SHINY_ICON}` : '';
-          return `**${start + idx + 1}.** \`[${e.firstId}]\` ${e.count}x ${rarityIconsMap[e.rarity] || '📦'} ${e.emoji} **${e.name}**${shinyIconPart}${badgeIcon}`;
+          return `**${safePage * itemsPerPage + idx + 1}.** \`[${e.firstId}]\` ${e.count}x ${rarityIconsMap[e.rarity] || '📦'} ${e.emoji} **${e.name}**${shinyIconPart}${badgeIcon}`;
         }).join('\n') || toSmallCaps('Collection page empty.');
 
         const displayName = user.customNickname || message.author.username;
         const colIcon = callerHasBetaView ? BETA_EMOJIS.COLLECTIONS : '📖';
         const container = new ContainerBuilder().setAccentColor(0x9b59b6).addTextDisplayComponents(
           new TextDisplayBuilder().setContent(
-            toSmallCaps(`# ${colIcon} ${displayName}'s Chibi Collection (Page ${page + 1}/${totalPages})\n\nSort: ${sortBy === 'rarity' ? 'Rarity' : 'Alphabetical'}\n\n`) +
+            toSmallCaps(`# ${colIcon} ${displayName}'s Chibi Collection (Page ${safePage + 1}/${totalPages})\n\nSort: ${sortBy === 'rarity' ? 'Rarity' : 'Alphabetical'}\n\n`) +
             formatted +
             toSmallCaps(`\n\n*Unique Types: ${new Set(user.inventory.chibis.map(c => c.name)).size} | Total Owned: ${user.inventory.chibis.length}*`)
           )
         );
-        return { container, totalPages };
+        return { container, totalPages, safePage };
       };
 
       const getColRows = (page, totalPages) => [
@@ -1928,9 +1627,9 @@ client.on('messageCreate', async message => {
         )
       ];
 
-      const initialRender = renderColContainer(currentPage);
+      const initial = renderColContainer(currentPage);
       const colMsg = await message.reply({
-        components: [initialRender.container, ...getColRows(currentPage, initialRender.totalPages)],
+        components: [initial.container, ...getColRows(initial.safePage, initial.totalPages)],
         flags: MessageFlags.IsComponentsV2
       });
 
@@ -1944,7 +1643,8 @@ client.on('messageCreate', async message => {
         else if (i.customId === 'col_next') currentPage++;
 
         const updated = renderColContainer(currentPage);
-        await colMsg.edit({ components: [updated.container, ...getColRows(currentPage, updated.totalPages)], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
+        currentPage = updated.safePage;
+        await colMsg.edit({ components: [updated.container, ...getColRows(updated.safePage, updated.totalPages)], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
       });
       return;
     }
@@ -1956,18 +1656,17 @@ client.on('messageCreate', async message => {
       if (directItem === 'buy' && args[1]) {
         const diceObj = (gameData.shopDice || []).find(d => d.id.toLowerCase() === args[1].toLowerCase() || d.name.toLowerCase().includes(args[1].toLowerCase()));
         if (!diceObj) return message.reply(toSmallCaps('❌ Dice not found in shop!'));
-        if (diceObj.restriction === 'cash' && Number(user.cash || 0) < diceObj.cost) {
+        if (diceObj.restriction === 'cash' && user.cash < diceObj.cost) {
           return message.reply(toSmallCaps(`❌ Need ${diceObj.costDisplay} Cash!`));
         }
-        if (diceObj.restriction === 'cash') user.cash = Number(user.cash || 0) - diceObj.cost;
+        if (diceObj.restriction === 'cash') user.cash -= diceObj.cost;
         user.equippedDice = diceObj.id;
         await saveUsers();
         return message.reply(toSmallCaps(`✅ Equipped ${diceObj.emoji} **${diceObj.name}** (+${diceObj.luckPercent}% Luck)!`));
       }
 
       if (directItem === 'dice') {
-        const unitCost = 10;
-        const totalCost = unitCost * directQty;
+        const totalCost = 10 * directQty;
         if ((user.points || 0) < totalCost) {
           return message.reply(toSmallCaps(`❌ You need **${totalCost} Points** to buy **${directQty}x Dice**, but you only have **${user.points || 0} Points**!`));
         }
@@ -1986,10 +1685,10 @@ client.on('messageCreate', async message => {
       const diceList = (gameData.shopDice || []).map(d => `${d.emoji} **${d.name}** (\`${d.id}\`) — ${d.costDisplay} | +${d.luckPercent}%`).join('\n');
       const container = new ContainerBuilder().setAccentColor(0xf1c40f).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
-          toSmallCaps('# 🛒 Chibi Shop\nBoost your rolling potential with shop items!\n\n' +
+          toSmallCaps(`# 🛒 Chibi Shop\nBoost your rolling potential with shop items!\n\n` +
           `🎲 +10 Dice (100 Pts): Stacks directly onto your Dice balance (or use \`${currentPrefix}shop dice [qty]\`)\n` +
-          '🧴 Spray (5 🎲): Use this for Awesome Chibi boost [30 Uses]\n' +
-          '🍀 Clover (15 🎲): Use this to duplicate Chibis while rolling [50 Uses]\n\n**Shop Dice** (`' + currentPrefix + 'shop buy <id>`):\n') + diceList
+          `🧴 Spray (5 🎲): Use this for Awesome Chibi boost [30 Uses]\n` +
+          `🍀 Clover (15 🎲): Use this to duplicate Chibis while rolling [50 Uses]\n\n**Shop Dice** (\`${currentPrefix}shop buy <id>\`):\n`) + diceList
         )
       );
       const shopMsg = await message.reply({ components: [container, row], flags: MessageFlags.IsComponentsV2 });
@@ -2001,26 +1700,24 @@ client.on('messageCreate', async message => {
         if (!user.inventory.items) user.inventory.items = { spray: 0, clover: 0 };
 
         if (i.customId === 'buy_dice_10') {
-          const cost = 100;
-          const amount = 10;
-          if ((user.points || 0) < cost) {
-            return i.followUp({ content: toSmallCaps(`❌ Not enough points! You need ${cost} Points, you have ${user.points || 0}.`), ephemeral: true });
-          }
-          user.points = Number(user.points || 0) - cost;
-          user.dice = Number(user.dice || 0) + amount;
+          if ((user.points || 0) < 100) return i.followUp({ content: toSmallCaps(`❌ Not enough points! You need 100 Points, you have ${user.points || 0}.`), ephemeral: true });
+          user.points -= 100;
+          user.dice = Number(user.dice || 0) + 10;
           updateUserRank(user);
           await saveUsers();
-          return i.followUp({ content: toSmallCaps(`✅ Purchased **+${amount}x Dice 🎲**! Stacked Dice Balance: **${user.dice} 🎲**`), ephemeral: true });
-        } else if (i.customId === 'buy_spray') {
+          return i.followUp({ content: toSmallCaps(`✅ Purchased **+10x Dice 🎲**! Stacked Dice Balance: **${user.dice} 🎲**`), ephemeral: true });
+        }
+        if (i.customId === 'buy_spray') {
           if (user.dice < 5) return i.followUp({ content: toSmallCaps('❌ Not enough dice!'), ephemeral: true });
-          user.dice = Number(user.dice || 0) - 5;
+          user.dice -= 5;
           user.inventory.items.spray = Number(user.inventory.items.spray || 0) + 30;
           updateUserRank(user);
           await saveUsers();
           return i.followUp({ content: toSmallCaps(`✅ Successfully purchased Spray! Uses: ${user.inventory.items.spray} | Remaining Dice: ${user.dice} 🎲`), ephemeral: true });
-        } else if (i.customId === 'buy_clover') {
+        }
+        if (i.customId === 'buy_clover') {
           if (user.dice < 15) return i.followUp({ content: toSmallCaps('❌ Not enough dice!'), ephemeral: true });
-          user.dice = Number(user.dice || 0) - 15;
+          user.dice -= 15;
           user.inventory.items.clover = Number(user.inventory.items.clover || 0) + 50;
           updateUserRank(user);
           await saveUsers();
@@ -2031,9 +1728,7 @@ client.on('messageCreate', async message => {
     }
 
     if (command === 'cstats') {
-      if (!user.inventory || !user.inventory.chibis || user.inventory.chibis.length === 0) {
-        return message.reply(toSmallCaps('❌ You have no chibis in your inventory!'));
-      }
+      if (!user.inventory?.chibis?.length) return message.reply(toSmallCaps('❌ You have no chibis in your inventory!'));
       const hpIcon = callerHasBetaView ? BETA_EMOJIS.HP : '❤️';
       const atkIcon = callerHasBetaView ? BETA_EMOJIS.ATK : '🗡️';
       const defIcon = callerHasBetaView ? BETA_EMOJIS.DEF : '🛡️';
@@ -2043,7 +1738,7 @@ client.on('messageCreate', async message => {
         const chibi = user.inventory.chibis.find(c => (c.chibiId || c.id) === chibiId);
         if (!chibi) return toSmallCaps(`**[${index + 1}]** *Chibi missing from inventory*`);
 
-        const statConfig = gameData.stats[chibi.rarity]?.[chibi.isShiny ? 'shiny' : 'normal'] || { hp: 100, hpPer: 10, atk: 20, atkPer: 2, def: 10, defPer: 1 };
+        const statConfig = gameData.stats?.[chibi.rarity]?.[chibi.isShiny ? 'shiny' : 'normal'] || { hp: 100, hpPer: 10, atk: 20, atkPer: 2, def: 10, defPer: 1 };
         const hpVal = statConfig.hp + chibi.level * statConfig.hpPer;
         const atkVal = statConfig.atk + chibi.level * statConfig.atkPer;
         const defVal = statConfig.def + chibi.level * statConfig.defPer;
@@ -2064,8 +1759,7 @@ client.on('messageCreate', async message => {
       const displayName = user.customNickname || message.author.username;
       const container = new ContainerBuilder().setAccentColor(0x2ecc71).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
-          toSmallCaps(`# 📜 ${displayName}'s Team Card\n\n`) +
-          teamLines.join('\n') +
+          toSmallCaps(`# 📜 ${displayName}'s Team Card\n\n`) + teamLines.join('\n') +
           toSmallCaps(`\n\n*Tip: Use ${currentPrefix}equipteam [id] [1-3] to assign chibis to your team slots!*`)
         )
       );
@@ -2109,99 +1803,53 @@ client.on('messageCreate', async message => {
         new ButtonBuilder().setCustomId('rank_next').setLabel(toSmallCaps('Next ▶')).setStyle(ButtonStyle.Primary).setDisabled(page >= totalPages - 1)
       );
 
-      if (callerHasBetaView) {
-        const buildBetaRanksPageContent = async (page) => {
-          const start = page * itemsPerPage;
-          const lines = await Promise.all(allSortedUsers.slice(start, start + itemsPerPage).map(async (u, idx) => {
-            const username = await getDisplayName(u.uId);
-            let clanSubLine = '';
-            if (u.clan && db.clans[u.clan]) {
-              const clanObj = db.clans[u.clan];
-              clanSubLine = `\n   ${getClanLogoDisplay(clanObj.logoId)} ` + toSmallCaps(u.clan.replace(/\*/g, ''));
-            }
-            return toSmallCaps(`**${start + idx + 1}.** @${username} | `) + `${u.rank}` + toSmallCaps(` | ${BETA_EMOJIS.TROPHY_PTS} ${(u.points || 0).toLocaleString()}`) + clanSubLine;
-          }));
-          return lines.join('\n\n') || toSmallCaps('No players on the leaderboard yet.');
-        };
-
-        const renderBetaRanksContainer = async (page) => new ContainerBuilder().setAccentColor(0xf1c40f).addTextDisplayComponents(
-          new TextDisplayBuilder().setContent(
-            `${BETA_EMOJIS.CRR_TROPHY} ` + toSmallCaps(`**Chibi Global Leaderboard [${seasonMeta.name}]**\n`) +
-            `${BETA_EMOJIS.END_SEASON}: ` + toSmallCaps(`${seasonTimerStr} (Page ${page + 1}/${totalPages})\n\n`) +
-            await buildBetaRanksPageContent(page) +
-            toSmallCaps('\n\n____________________\n\n') +
-            `${BETA_EMOJIS.USERS} ` + toSmallCaps('Your rank: ') + `${userRankIcon}` +
-            toSmallCaps(` | ${BETA_EMOJIS.TROPHY_PTS} ${userPointsDisplay.toLocaleString()} (#${userRankPos})`)
-          )
-        );
-
-        const initialContainer = await renderBetaRanksContainer(currentPage);
-        const ranksMsg = await message.reply({ components: [initialContainer, getRanksRow(currentPage)], flags: MessageFlags.IsComponentsV2 });
-        const ranksCollector = ranksMsg.createMessageComponentCollector({ time: 120000 });
-        ranksCollector.on('collect', async i => {
-          if (!i.deferred && !i.replied) await i.deferUpdate().catch(() => {});
-          if (i.user.id !== userId) return i.followUp({ content: toSmallCaps('Not your leaderboard session!'), ephemeral: true });
-          if (i.customId === 'rank_prev' && currentPage > 0) currentPage--;
-          if (i.customId === 'rank_next' && currentPage < totalPages - 1) currentPage++;
-          const updatedContainer = await renderBetaRanksContainer(currentPage);
-          await ranksMsg.edit({ components: [updatedContainer, getRanksRow(currentPage)], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
-        });
-        return;
-      }
-
-      const buildRanksPageContent = async (page) => {
+      const renderRanksContainer = async (page) => {
         const start = page * itemsPerPage;
         const lines = await Promise.all(allSortedUsers.slice(start, start + itemsPerPage).map(async (u, idx) => {
           const username = await getDisplayName(u.uId);
-          let clanInfo = '';
-          if (u.clan && db.clans[u.clan]) {
-            const clanObj = db.clans[u.clan];
-            clanInfo = ` | ${getClanLogoDisplay(clanObj.logoId)} ${u.clan.replace(/\*/g, '')}`.trim();
+          const clanObj = u.clan && db.clans[u.clan];
+          const clanPart = clanObj ? (callerHasBetaView ? `\n   ${getClanLogoDisplay(clanObj.logoId)} ` + toSmallCaps(u.clan.replace(/\*/g, '')) : ` | ${getClanLogoDisplay(clanObj.logoId)} ${u.clan.replace(/\*/g, '')}`.trim()) : '';
+          if (callerHasBetaView) {
+            return toSmallCaps(`**${start + idx + 1}.** @${username} | `) + `${u.rank}` + toSmallCaps(` | ${BETA_EMOJIS.TROPHY_PTS} ${(u.points || 0).toLocaleString()}`) + clanPart;
           }
-          return toSmallCaps(`**${start + idx + 1}.** **${username}** — Rank: `) + `${u.rank}` + toSmallCaps(` | Points: **${u.points.toLocaleString()}**`) + clanInfo;
+          return toSmallCaps(`**${start + idx + 1}.** **${username}** — Rank: `) + `${u.rank}` + toSmallCaps(` | Points: **${(u.points || 0).toLocaleString()}**`) + clanPart;
         }));
-        return lines.join('\n') || toSmallCaps('No players on the leaderboard yet.');
+        const body = lines.join(callerHasBetaView ? '\n\n' : '\n') || toSmallCaps('No players on the leaderboard yet.');
+        const header = callerHasBetaView
+          ? `${BETA_EMOJIS.CRR_TROPHY} ` + toSmallCaps(`**Chibi Global Leaderboard [${seasonMeta.name}]**\n`) + `${BETA_EMOJIS.END_SEASON}: ` + toSmallCaps(`${seasonTimerStr} (Page ${page + 1}/${totalPages})\n\n`)
+          : toSmallCaps(`# 🏆 Chibi Global Leaderboard Season ${seasonNum}\nEnd Season: ${seasonTimerStr}\n\n(Page ${page + 1}/${totalPages})\n\n`);
+        const footer = callerHasBetaView
+          ? toSmallCaps('\n\n____________________\n\n') + `${BETA_EMOJIS.USERS} ` + toSmallCaps('Your rank: ') + `${userRankIcon}` + toSmallCaps(` | ${BETA_EMOJIS.TROPHY_PTS} ${userPointsDisplay.toLocaleString()} (#${userRankPos})`)
+          : toSmallCaps('\n\n-----------------------------------\n👤 Your Rank: #') + `${userRankPos} | Rank: ` + `${userRankIcon}` + toSmallCaps(` | Points: ${userPointsDisplay.toLocaleString()}`);
+
+        return new ContainerBuilder().setAccentColor(0xf1c40f).addTextDisplayComponents(new TextDisplayBuilder().setContent(header + body + footer));
       };
 
-      const renderRanksContainer = async (page) => new ContainerBuilder().setAccentColor(0xf1c40f).addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(
-          toSmallCaps(`# 🏆 Chibi Global Leaderboard Season ${seasonNum}\nEnd Season: ${seasonTimerStr}\n\n(Page ${page + 1}/${totalPages})\n\n`) +
-          await buildRanksPageContent(page) +
-          toSmallCaps('\n\n-----------------------------------\n👤 Your Rank: #') + `${userRankPos} | Rank: ` + `${userRankIcon}` + toSmallCaps(` | Points: ${userPointsDisplay.toLocaleString()}`)
-        )
-      );
-
-      const initialContainer = await renderRanksContainer(currentPage);
-      const ranksMsg = await message.reply({ components: [initialContainer, getRanksRow(currentPage)], flags: MessageFlags.IsComponentsV2 });
+      const ranksMsg = await message.reply({ components: [await renderRanksContainer(currentPage), getRanksRow(currentPage)], flags: MessageFlags.IsComponentsV2 });
       const ranksCollector = ranksMsg.createMessageComponentCollector({ time: 120000 });
       ranksCollector.on('collect', async i => {
         if (!i.deferred && !i.replied) await i.deferUpdate().catch(() => {});
         if (i.user.id !== userId) return i.followUp({ content: toSmallCaps('Not your leaderboard session!'), ephemeral: true });
         if (i.customId === 'rank_prev' && currentPage > 0) currentPage--;
         if (i.customId === 'rank_next' && currentPage < totalPages - 1) currentPage++;
-        const updatedContainer = await renderRanksContainer(currentPage);
-        await ranksMsg.edit({ components: [updatedContainer, getRanksRow(currentPage)], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
+        await ranksMsg.edit({ components: [await renderRanksContainer(currentPage), getRanksRow(currentPage)], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
       });
       return;
     }
 
     if (command === 'ccranks') {
-      const clanEntries = Object.entries(db.clans).map(([name, clan]) => {
-        const totalPoints = clan.members.reduce((acc, mId) => acc + (db.users[mId]?.points || 0), 0);
-        return { name, clan, totalPoints };
-      }).sort((a, b) => b.totalPoints - a.totalPoints);
+      const clanEntries = Object.entries(db.clans).map(([name, clan]) => ({
+        name, clan, totalPoints: clan.members.reduce((acc, mId) => acc + (db.users[mId]?.points || 0), 0)
+      })).sort((a, b) => b.totalPoints - a.totalPoints);
 
       const maxClanSeasonMs = 30 * 24 * 60 * 60 * 1000;
-      const timeRemainingMs = Math.min(maxClanSeasonMs, Math.max(0, (db.config.clanSeasonExpires || (Date.now() + maxClanSeasonMs)) - Date.now()));
-      const clanTimerStr = formatTimeRemaining(timeRemainingMs);
-      const rewards = db.config.clanRewards || {};
+      const clanTimerStr = formatTimeRemaining(Math.min(maxClanSeasonMs, Math.max(0, (db.config.clanSeasonExpires || (Date.now() + maxClanSeasonMs)) - Date.now())));
 
       const formatReward = (rNum) => {
-        const rw = rewards[rNum];
+        const rw = db.config.clanRewards[rNum];
         if (!rw) return '100x 🎲 Dice (Consolation)';
-        const rIcon = rarityIconsMap[rw.rarity] || '📦';
         const sampleChibi = gameData.chibis.find(c => c.rarity === rw.rarity) || gameData.chibis[0];
-        return `${rw.qty} ${rIcon} ${sampleChibi ? sampleChibi.emoji : rw.chibiEmoji}`;
+        return `${rw.qty} ${rarityIconsMap[rw.rarity] || '📦'} ${sampleChibi ? sampleChibi.emoji : rw.chibiEmoji}`;
       };
 
       const top10Lines = await Promise.all(clanEntries.slice(0, 10).map(async (c, idx) => {
@@ -2213,34 +1861,24 @@ client.on('messageCreate', async message => {
       if (user.clan && db.clans[user.clan]) {
         const uClanObj = db.clans[user.clan];
         const uClanRankIdx = clanEntries.findIndex(c => c.name === user.clan);
-        const uClanRank = uClanRankIdx !== -1 ? `#${uClanRankIdx + 1}` : 'Unranked';
         const uClanPoints = uClanObj.members.reduce((acc, mId) => acc + (db.users[mId]?.points || 0), 0);
         const leaderName = await getDisplayName(uClanObj.leader);
-        userClanLine = toSmallCaps(`${uClanRank}. ${getClanLogoDisplay(uClanObj.logoId)} ${user.clan.replace(/\*/g, '')} | Leader: **${leaderName}** | Members: ${uClanObj.members.length} | Points: **${uClanPoints.toLocaleString()}**`);
+        userClanLine = toSmallCaps(`${uClanRankIdx !== -1 ? `#${uClanRankIdx + 1}` : 'Unranked'}. ${getClanLogoDisplay(uClanObj.logoId)} ${user.clan.replace(/\*/g, '')} | Leader: **${leaderName}** | Members: ${uClanObj.members.length} | Points: **${uClanPoints.toLocaleString()}**`);
       }
 
-      if (callerHasBetaView) {
-        const container = new ContainerBuilder().setAccentColor(0x9b59b6).addTextDisplayComponents(
-          new TextDisplayBuilder().setContent(
-            `${BETA_EMOJIS.GLOBAL} ` + toSmallCaps('**Top 10 Global Clan Leaderboard**\n') +
-            `${BETA_EMOJIS.END_SEASON}: ` + toSmallCaps(`${clanTimerStr}\n\n`) +
-            `${BETA_EMOJIS.RANKS_POS[1]}: ${formatReward(1)}\n${BETA_EMOJIS.RANKS_POS[2]}: ${formatReward(2)}\n${BETA_EMOJIS.RANKS_POS[3]}: ${formatReward(3)}\n\n` +
-            toSmallCaps('-----------------------------------\n\n') +
-            (top10Lines.join('\n') || toSmallCaps('No clans registered yet.')) +
-            toSmallCaps('\n\n-----------------------------------\n**Your Clan Status:**\n') + userClanLine
-          )
-        );
-        return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
-      }
-
-      const container = new ContainerBuilder().setAccentColor(0x9b59b6).addTextDisplayComponents(
-        new TextDisplayBuilder().setContent(
-          toSmallCaps(`# 🏛️ Top 10 Global Clan Leaderboard\nEnds: ${clanTimerStr}\n\n**Clan Rewards:**\n1st: ${formatReward(1)}\n2nd: ${formatReward(2)}\n3rd: ${formatReward(3)}\n\n-----------------------------------\n\n`) +
-          (top10Lines.join('\n') || toSmallCaps('No clans registered yet.')) +
+      const content = callerHasBetaView
+        ? `${BETA_EMOJIS.GLOBAL} ` + toSmallCaps('**Top 10 Global Clan Leaderboard**\n') + `${BETA_EMOJIS.END_SEASON}: ` + toSmallCaps(`${clanTimerStr}\n\n`) +
+          `${BETA_EMOJIS.RANKS_POS[1]}: ${formatReward(1)}\n${BETA_EMOJIS.RANKS_POS[2]}: ${formatReward(2)}\n${BETA_EMOJIS.RANKS_POS[3]}: ${formatReward(3)}\n\n` +
+          toSmallCaps('-----------------------------------\n\n') + (top10Lines.join('\n') || toSmallCaps('No clans registered yet.')) +
           toSmallCaps('\n\n-----------------------------------\n**Your Clan Status:**\n') + userClanLine
-        )
-      );
-      return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+        : toSmallCaps(`# 🏛️ Top 10 Global Clan Leaderboard\nEnds: ${clanTimerStr}\n\n**Clan Rewards:**\n1st: ${formatReward(1)}\n2nd: ${formatReward(2)}\n3rd: ${formatReward(3)}\n\n-----------------------------------\n\n`) +
+          (top10Lines.join('\n') || toSmallCaps('No clans registered yet.')) +
+          toSmallCaps('\n\n-----------------------------------\n**Your Clan Status:**\n') + userClanLine;
+
+      return message.reply({
+        components: [new ContainerBuilder().setAccentColor(0x9b59b6).addTextDisplayComponents(new TextDisplayBuilder().setContent(content))],
+        flags: MessageFlags.IsComponentsV2
+      });
     }
 
     if (command === 'equipteam') {
@@ -2256,11 +1894,9 @@ client.on('messageCreate', async message => {
       if (!chibi) return message.reply(toSmallCaps(`❌ Chibi ID not found in your inventory! Check ${currentPrefix}collections for correct IDs.`));
 
       const chibiUniqueId = chibi.chibiId || chibi.id;
-      if (user.team.includes(chibiUniqueId)) {
-        const existingSlot = user.team.indexOf(chibiUniqueId) + 1;
-        if (existingSlot !== slot) {
-          return message.reply(toSmallCaps(`❌ This Chibi is already equipped in Team Slot ${existingSlot}! You cannot equip the same Chibi in multiple slots.`));
-        }
+      const existingSlot = user.team.indexOf(chibiUniqueId) + 1;
+      if (existingSlot > 0 && existingSlot !== slot) {
+        return message.reply(toSmallCaps(`❌ This Chibi is already equipped in Team Slot ${existingSlot}! You cannot equip the same Chibi in multiple slots.`));
       }
 
       const wasEmpty = !user.team[slot - 1];
@@ -2304,114 +1940,95 @@ client.on('messageCreate', async message => {
         handled = true;
         collector.stop();
 
-        if (i.customId === 'accept_battle') {
-          const p1User = user;
-          const p2User = db.users[opponent.id];
-
-          const getTeamChibis = (u) => (u.team || [null, null, null]).map(id => {
-            if (!id) return null;
-            return (u.inventory?.chibis || []).find(c => (c.chibiId || c.id) === id) || null;
-          });
-
-          const p1Team = getTeamChibis(p1User);
-          const p2Team = getTeamChibis(p2User);
-
-          const getTeamCombatStats = (team) => {
-            let totalPower = 50;
-            const detailed = team.map(c => {
-              if (!c) return { hp: 0, atk: 0, def: 0 };
-              const statCfg = gameData.stats?.[c.rarity]?.[c.isShiny ? 'shiny' : 'normal'] || { hp: 100, hpPer: 10, atk: 20, atkPer: 2, def: 10, defPer: 1 };
-              const hp = Math.max(1, (statCfg.hp || 100) + (Number(c.level) || 1) * (statCfg.hpPer || 10));
-              const atk = Math.max(0, (statCfg.atk || 20) + (Number(c.level) || 1) * (statCfg.atkPer || 2));
-              const def = Math.max(0, (statCfg.def || 10) + (Number(c.level) || 1) * (statCfg.defPer || 1));
-              totalPower += hp + atk * 3 + def * 2;
-              return { hp, atk, def };
-            });
-            return { totalPower, detailed };
-          };
-
-          const p1Power = getTeamCombatStats(p1Team).totalPower * (0.85 + Math.random() * 0.3);
-          const p2Power = getTeamCombatStats(p2Team).totalPower * (0.85 + Math.random() * 0.3);
-          const isP1Winner = p1Power >= p2Power;
-          const winner = isP1Winner ? message.author : opponent;
-          const winUser = isP1Winner ? p1User : p2User;
-          const loseUser = isP1Winner ? p2User : p1User;
-          const winTeam = isP1Winner ? p1Team : p2Team;
-
-          const getBattlePoints = (pts) => {
-            if (pts >= 8002) return { win: Math.floor(Math.random() * 31) + 120, lose: 75 };
-            if (pts >= 5501) return { win: Math.floor(Math.random() * 31) + 90, lose: 50 };
-            if (pts >= 4001) return { win: Math.floor(Math.random() * 31) + 70, lose: 30 };
-            if (pts >= 2501) return { win: Math.floor(Math.random() * 31) + 50, lose: 20 };
-            if (pts >= 1000) return { win: Math.floor(Math.random() * 21) + 20, lose: 10 };
-            return { win: Math.floor(Math.random() * 11) + 10, lose: 5 };
-          };
-
-          const winReward = getBattlePoints(winUser.points || 0);
-          const losePenalty = getBattlePoints(loseUser.points || 0);
-          winUser.points = (winUser.points || 0) + winReward.win;
-          loseUser.points = Math.max(0, (loseUser.points || 0) - losePenalty.lose);
-          trackPeakPoints(winUser);
-
-          const p1CrystalWin = Math.floor(Math.random() * 7) + 10;
-          const p1CrystalLose = Math.floor(Math.random() * 7) + 2;
-          const p2CrystalWin = Math.floor(Math.random() * 7) + 10;
-          const p2CrystalLose = Math.floor(Math.random() * 7) + 2;
-
-          if (!db.config.eventCrystals) db.config.eventCrystals = {};
-          const winnerId = isP1Winner ? userId : opponent.id;
-          const loserId = isP1Winner ? opponent.id : userId;
-          db.config.eventCrystals[winnerId] = (db.config.eventCrystals[winnerId] || 0) + (isP1Winner ? p1CrystalWin : p2CrystalWin);
-          db.config.eventCrystals[loserId] = (db.config.eventCrystals[loserId] || 0) + (isP1Winner ? p1CrystalLose : p2CrystalLose);
-
-          const totalExpWon = addExpAndLevelUp(winUser, winTeam.find(Boolean), 400);
-          updateUserRank(p1User);
-          updateUserRank(p2User);
-          await evaluateAndSyncUserBadges(userId, p1User, message.guild);
-          await evaluateAndSyncUserBadges(opponent.id, p2User, message.guild);
-          await saveUsers();
-
-          const p1Name = p1User.customNickname || message.author.username;
-          const p2Name = p2User.customNickname || opponent.username;
-
-          const renderTeamLineWithStats = (team, isWinnerTeam) => team.map((c, idx) => {
-            if (!c) return toSmallCaps(`**[${idx + 1}]** *Empty Slot*`);
-            const statCfg = gameData.stats?.[c.rarity]?.[c.isShiny ? 'shiny' : 'normal'] || { hp: 100, hpPer: 10, atk: 20, atkPer: 2, def: 10, defPer: 1 };
-            const lvl = Math.max(1, Number(c.level) || 1);
-            const maxHp = Math.max(1, (statCfg.hp || 100) + lvl * (statCfg.hpPer || 10));
-            const atk = Math.max(0, (statCfg.atk || 20) + lvl * (statCfg.atkPer || 2));
-            const def = Math.max(0, (statCfg.def || 10) + lvl * (statCfg.defPer || 1));
-            const maxDef = Math.max(def, 220);
-
-            const currentHp = isWinnerTeam ? maxHp : 0;
-            const hpBar = buildStatBar(currentHp, maxHp, 10);
-            const defBar = buildStatBar(def, maxDef, 10);
-
-            const rarityBadge = rarityIconsMap[c.rarity] || '📦';
-            const shinyTag = c.isShiny ? ` ${SHINY_ICON}` : '';
-            const eventTag = c.rarity === 'SSRP' && EVENT_ICONS?.EVENT_BADGE ? ` ${EVENT_ICONS.EVENT_BADGE}` : '';
-
-            return (
-              `**[${idx + 1}]** ${rarityBadge} ${c.emoji || '✨'} **${c.name}**${shinyTag}${eventTag} (Lvl ${lvl})\n` +
-              `${BATTLE_ICONS.hp} ${hpBar} ${currentHp}/${maxHp}\n` +
-              `${BATTLE_ICONS.def} ${defBar} ${def}/${maxDef}\n` +
-              `${BATTLE_ICONS.atk}  ${atk}`
-            );
-          }).join('\n\n');
-
-          const container = new ContainerBuilder().setAccentColor(isP1Winner ? 0xf1c40f : 0xe74c3c).addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(
-              toSmallCaps(`# ⚔️ 3v3 Chibi Arena Clash Result\n\n🏆 Winner: <@${winner.id}> triumphs in a fierce 3v3 showdown!\n\n🛡️ ${p1Name}'s Team Lineup:\n\n`) +
-              renderTeamLineWithStats(p1Team, isP1Winner) +
-              toSmallCaps(`\n\n🛡️ ${p2Name}'s Team Lineup:\n\n`) +
-              renderTeamLineWithStats(p2Team, !isP1Winner) +
-              toSmallCaps(`\n\n📊 Match Rewards: ✨ Victor earned +${winReward.win} Points, +${totalExpWon} EXP & Crystals! 💔 Loser lost -${losePenalty.lose} Points.`)
-            )
-          );
-          await battleMsg.edit({ content: '', components: [container], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
-        } else {
-          await battleMsg.edit({ content: toSmallCaps(`❌ <@${opponent.id}> declined the 3v3 arena clash.`), components: [] }).catch(() => {});
+        if (i.customId !== 'accept_battle') {
+          return battleMsg.edit({ content: toSmallCaps(`❌ <@${opponent.id}> declined the 3v3 arena clash.`), components: [] }).catch(() => {});
         }
+
+        const p1User = user;
+        const p2User = db.users[opponent.id];
+        const getTeamChibis = (u) => (u.team || [null, null, null]).map(id => id && (u.inventory?.chibis || []).find(c => (c.chibiId || c.id) === id) || null);
+        const p1Team = getTeamChibis(p1User);
+        const p2Team = getTeamChibis(p2User);
+
+        const getTeamPower = (team) => {
+          let power = 50;
+          for (const c of team) {
+            if (!c) continue;
+            const statCfg = gameData.stats?.[c.rarity]?.[c.isShiny ? 'shiny' : 'normal'] || { hp: 100, hpPer: 10, atk: 20, atkPer: 2, def: 10, defPer: 1 };
+            const hp = Math.max(1, (statCfg.hp || 100) + (Number(c.level) || 1) * (statCfg.hpPer || 10));
+            const atk = Math.max(0, (statCfg.atk || 20) + (Number(c.level) || 1) * (statCfg.atkPer || 2));
+            const def = Math.max(0, (statCfg.def || 10) + (Number(c.level) || 1) * (statCfg.defPer || 1));
+            power += hp + atk * 3 + def * 2;
+          }
+          return power;
+        };
+
+        const isP1Winner = getTeamPower(p1Team) * (0.85 + Math.random() * 0.3) >= getTeamPower(p2Team) * (0.85 + Math.random() * 0.3);
+        const winner = isP1Winner ? message.author : opponent;
+        const winUser = isP1Winner ? p1User : p2User;
+        const loseUser = isP1Winner ? p2User : p1User;
+        const winTeam = isP1Winner ? p1Team : p2Team;
+
+        const getBattlePoints = (pts) => {
+          if (pts >= 8002) return { win: Math.floor(Math.random() * 31) + 120, lose: 75 };
+          if (pts >= 5501) return { win: Math.floor(Math.random() * 31) + 90, lose: 50 };
+          if (pts >= 4001) return { win: Math.floor(Math.random() * 31) + 70, lose: 30 };
+          if (pts >= 2501) return { win: Math.floor(Math.random() * 31) + 50, lose: 20 };
+          if (pts >= 1000) return { win: Math.floor(Math.random() * 21) + 20, lose: 10 };
+          return { win: Math.floor(Math.random() * 11) + 10, lose: 5 };
+        };
+
+        const winReward = getBattlePoints(winUser.points || 0);
+        const losePenalty = getBattlePoints(loseUser.points || 0);
+        winUser.points = (winUser.points || 0) + winReward.win;
+        loseUser.points = Math.max(0, (loseUser.points || 0) - losePenalty.lose);
+        trackPeakPoints(winUser);
+
+        const winnerId = isP1Winner ? userId : opponent.id;
+        const loserId = isP1Winner ? opponent.id : userId;
+        db.config.eventCrystals[winnerId] = (db.config.eventCrystals[winnerId] || 0) + Math.floor(Math.random() * 7) + 10;
+        db.config.eventCrystals[loserId] = (db.config.eventCrystals[loserId] || 0) + Math.floor(Math.random() * 7) + 2;
+
+        const totalExpWon = addExpAndLevelUp(winUser, winTeam.find(Boolean), 400);
+        updateUserRank(p1User);
+        updateUserRank(p2User);
+        await evaluateAndSyncUserBadges(userId, p1User, message.guild);
+        await evaluateAndSyncUserBadges(opponent.id, p2User, message.guild);
+        await saveUsers();
+
+        const renderTeamLineWithStats = (team, isWinnerTeam) => team.map((c, idx) => {
+          if (!c) return toSmallCaps(`**[${idx + 1}]** *Empty Slot*`);
+          const statCfg = gameData.stats?.[c.rarity]?.[c.isShiny ? 'shiny' : 'normal'] || { hp: 100, hpPer: 10, atk: 20, atkPer: 2, def: 10, defPer: 1 };
+          const lvl = Math.max(1, Number(c.level) || 1);
+          const maxHp = Math.max(1, (statCfg.hp || 100) + lvl * (statCfg.hpPer || 10));
+          const atk = Math.max(0, (statCfg.atk || 20) + lvl * (statCfg.atkPer || 2));
+          const def = Math.max(0, (statCfg.def || 10) + lvl * (statCfg.defPer || 1));
+          const maxDef = Math.max(def, 220);
+          const currentHp = isWinnerTeam ? maxHp : 0;
+          const rarityBadge = rarityIconsMap[c.rarity] || '📦';
+          const shinyTag = c.isShiny ? ` ${SHINY_ICON}` : '';
+          const eventTag = c.rarity === 'SSRP' && EVENT_ICONS?.EVENT_BADGE ? ` ${EVENT_ICONS.EVENT_BADGE}` : '';
+
+          return (
+            `**[${idx + 1}]** ${rarityBadge} ${c.emoji || '✨'} **${c.name}**${shinyTag}${eventTag} (Lvl ${lvl})\n` +
+            `${BATTLE_ICONS.hp} ${buildStatBar(currentHp, maxHp, 10)} ${currentHp}/${maxHp}\n` +
+            `${BATTLE_ICONS.def} ${buildStatBar(def, maxDef, 10)} ${def}/${maxDef}\n` +
+            `${BATTLE_ICONS.atk}  ${atk}`
+          );
+        }).join('\n\n');
+
+        const p1Name = p1User.customNickname || message.author.username;
+        const p2Name = p2User.customNickname || opponent.username;
+        const container = new ContainerBuilder().setAccentColor(isP1Winner ? 0xf1c40f : 0xe74c3c).addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(
+            toSmallCaps(`# ⚔️ 3v3 Chibi Arena Clash Result\n\n🏆 Winner: <@${winner.id}> triumphs in a fierce 3v3 showdown!\n\n🛡️ ${p1Name}'s Team Lineup:\n\n`) +
+            renderTeamLineWithStats(p1Team, isP1Winner) +
+            toSmallCaps(`\n\n🛡️ ${p2Name}'s Team Lineup:\n\n`) +
+            renderTeamLineWithStats(p2Team, !isP1Winner) +
+            toSmallCaps(`\n\n📊 Match Rewards: ✨ Victor earned +${winReward.win} Points, +${totalExpWon} EXP & Crystals! 💔 Loser lost -${losePenalty.lose} Points.`)
+          )
+        );
+        await battleMsg.edit({ content: '', components: [container], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
       });
 
       collector.on('end', async () => {
@@ -2425,10 +2042,8 @@ client.on('messageCreate', async message => {
         const res = await fetch('https://meme-api.com/gimme');
         if (!res.ok) return message.reply(toSmallCaps('❌ Could not fetch a meme right now. Please try again later.'));
         const data = await res.json();
-        const title = data?.title || 'Random Meme';
-        const subreddit = data?.subreddit || 'memes';
         const container = new ContainerBuilder().setAccentColor(0xe74c3c).addTextDisplayComponents(
-          new TextDisplayBuilder().setContent(toSmallCaps(`# ${title}\n*(r/${subreddit})*`))
+          new TextDisplayBuilder().setContent(toSmallCaps(`# ${data?.title || 'Random Meme'}\n*(r/${data?.subreddit || 'memes'})*`))
         );
         return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
       } catch {
@@ -2451,7 +2066,6 @@ client.on('messageCreate', async message => {
           trackPeakPoints(user);
           const awardedExp = addExpAndLevelUp(user, null, 450);
           const triviaCrystals = Math.floor(Math.random() * 6) + 5;
-          if (!db.config.eventCrystals) db.config.eventCrystals = {};
           db.config.eventCrystals[userId] = (db.config.eventCrystals[userId] || 0) + triviaCrystals;
           updateUserRank(user);
           await evaluateAndSyncUserBadges(userId, user, message.guild);
@@ -2463,9 +2077,7 @@ client.on('messageCreate', async message => {
       });
 
       collector.on('end', async () => {
-        if (!answered) {
-          await message.channel.send(toSmallCaps(`⏳ Time's up! The answer was **${selected.a[0]}**.`)).catch(() => {});
-        }
+        if (!answered) await message.channel.send(toSmallCaps(`⏳ Time's up! The answer was **${selected.a[0]}**.`)).catch(() => {});
       });
       return;
     }
@@ -2477,14 +2089,14 @@ client.on('messageCreate', async message => {
       const targetUserData = db.users[targetUserId];
       updateUserRank(targetUserData);
 
-      if (targetUserData.inventory && targetUserData.inventory.chibis && targetUserData.inventory.chibis.length > 0) {
+      if (targetUserData.inventory?.chibis?.length) {
         let highestChibi = null;
         let highestTier = 0;
         let highestVal = 0;
+        const allChibisPool = [...(gameData.chibis || []), ...(gameData.eventChibis || [])];
 
         for (const c of targetUserData.inventory.chibis) {
           const tier = REVAMPED_RARITY_TIER[c.rarity] || RARITY_HIERARCHY[c.rarity] || 1;
-          const allChibisPool = [...(gameData.chibis || []), ...(gameData.eventChibis || [])];
           const template = allChibisPool.find(t => t.name === c.name && t.rarity === c.rarity);
           const oddsStr = template ? (c.isShiny ? template.shinyOdds : template.odds) : '1 in 1';
           const val = parseOddsNumber(oddsStr);
@@ -2497,8 +2109,7 @@ client.on('messageCreate', async message => {
 
         if (highestChibi && (
           !targetUserData.bestRoll ||
-          targetUserData.bestRoll === 'None' ||
-          targetUserData.bestRoll === '1 in 1' ||
+          ['None', '1 in 1'].includes(targetUserData.bestRoll) ||
           highestTier > (targetUserData.bestRollTier || 0) ||
           (highestTier === (targetUserData.bestRollTier || 0) && highestVal > (targetUserData.bestRollVal || 0))
         )) {
@@ -2510,35 +2121,30 @@ client.on('messageCreate', async message => {
         }
       }
 
-      const targetMember = targetUserMention || message.author;
       const syncedBadges = await evaluateAndSyncUserBadges(targetUserId, targetUserData, message.guild);
       await saveUsers();
-
-      const attachment = await buildProfileAttachmentForUser(targetUserId, targetMember, syncedBadges);
+      const attachment = await buildProfileAttachmentForUser(targetUserId, targetUserMention || message.author, syncedBadges);
       return message.reply({ files: [attachment] });
     }
 
     if (command === 'clanlist') {
       const clanNames = Object.keys(db.clans);
-      if (clanNames.length === 0) return message.reply(toSmallCaps('🏛️ There are currently no clans available.'));
+      if (!clanNames.length) return message.reply(toSmallCaps('🏛️ There are currently no clans available.'));
       let sortBy = 'points';
 
-      const getSortedClanEntries = async () => {
+      const renderClanContainer = async () => {
         const entries = await Promise.all(clanNames.map(async name => {
           const clan = db.clans[name];
           return {
-            name, leaderName: await getDisplayName(clan.leader),
+            name,
+            leaderName: await getDisplayName(clan.leader),
             totalPoints: clan.members.reduce((acc, mId) => acc + (db.users[mId]?.points || 0), 0),
-            memberCount: clan.members.length, logoId: clan.logoId || '1'
+            memberCount: clan.members.length,
+            logoId: clan.logoId || '1'
           };
         }));
         entries.sort((a, b) => sortBy === 'points' ? b.totalPoints - a.totalPoints : b.memberCount - a.memberCount);
-        return entries;
-      };
-
-      const renderClanContainer = async () => {
-        const sortedEntries = await getSortedClanEntries();
-        const clanListText = sortedEntries.map((c, idx) =>
+        const clanListText = entries.map((c, idx) =>
           toSmallCaps(`${idx + 1}. ${getClanLogoDisplay(c.logoId)} ${c.name.replace(/\*/g, '')} | Leader: ${c.leaderName} | Points: 🏆 ${c.totalPoints.toLocaleString()} | Members: 👥 ${c.memberCount}`)
         ).join('\n');
         return new ContainerBuilder().setAccentColor(0x34495e).addTextDisplayComponents(
@@ -2551,16 +2157,14 @@ client.on('messageCreate', async message => {
         new ButtonBuilder().setCustomId('sort_members').setLabel(toSmallCaps('Sort by Members 👥')).setStyle(sortBy === 'members' ? ButtonStyle.Success : ButtonStyle.Secondary)
       )];
 
-      const initialContainer = await renderClanContainer();
-      const clanMsg = await message.reply({ components: [initialContainer, ...getClanRows()], flags: MessageFlags.IsComponentsV2 });
+      const clanMsg = await message.reply({ components: [await renderClanContainer(), ...getClanRows()], flags: MessageFlags.IsComponentsV2 });
       const clanCollector = clanMsg.createMessageComponentCollector({ time: 120000 });
       clanCollector.on('collect', async i => {
         if (!i.deferred && !i.replied) await i.deferUpdate().catch(() => {});
         if (i.user.id !== userId) return i.followUp({ content: toSmallCaps('Not your clan list session!'), ephemeral: true });
         if (i.customId === 'sort_points') sortBy = 'points';
         if (i.customId === 'sort_members') sortBy = 'members';
-        const updatedContainer = await renderClanContainer();
-        await clanMsg.edit({ components: [updatedContainer, ...getClanRows()], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
+        await clanMsg.edit({ components: [await renderClanContainer(), ...getClanRows()], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
       });
       return;
     }
@@ -2572,17 +2176,15 @@ client.on('messageCreate', async message => {
         return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}ccreateclan [ClanName] [Logo ID 1-12]\n\nAvailable Clan Logos:\n` + getClanLogoListText()));
       }
       if (!CLAN_LOGOS[logoArg]) {
-        return message.reply(toSmallCaps('❌ Invalid Logo ID! Please pick a number from 1 to 12 (ID 13+ is invalid).\n\nAvailable Clan Logos:\n' + getClanLogoListText()));
+        return message.reply(toSmallCaps('❌ Invalid Logo ID! Please pick a number from 1 to 12.\n\nAvailable Clan Logos:\n' + getClanLogoListText()));
       }
       if (clanName.length > 12) return message.reply(toSmallCaps('❌ Clan name cannot exceed 12 characters!'));
       if (db.clans[clanName]) return message.reply(toSmallCaps('❌ A clan with this name already exists!'));
-
-      const clanCreationCost = 100;
-      if (user.dice < clanCreationCost) {
-        return message.reply(toSmallCaps(`❌ You do not have enough dice to create a clan! You need **${clanCreationCost} 🎲 Dice**, but you only have **${user.dice} 🎲**.`));
+      if (user.dice < 100) {
+        return message.reply(toSmallCaps(`❌ You do not have enough dice to create a clan! You need **100 🎲 Dice**, but you only have **${user.dice} 🎲**.`));
       }
 
-      user.dice = Number(user.dice || 0) - clanCreationCost;
+      user.dice -= 100;
       db.clans[clanName] = {
         name: clanName, leader: userId, viceLeader: null, members: [userId],
         roles: { [userId]: 'Leader' }, description: '', logoId: logoArg, renameCount: 0
@@ -2590,7 +2192,7 @@ client.on('messageCreate', async message => {
       user.clan = clanName;
       updateUserRank(user);
       await saveUsers();
-      return message.reply(toSmallCaps(`✅ Successfully created and joined clan ${getClanLogoDisplay(logoArg)} **${clanName}**! (Cost: ${clanCreationCost} 🎲 Dice)`));
+      return message.reply(toSmallCaps(`✅ Successfully created and joined clan ${getClanLogoDisplay(logoArg)} **${clanName}**! (Cost: 100 🎲 Dice)`));
     }
 
     if (command === 'cclanjoin') {
@@ -2628,22 +2230,20 @@ client.on('messageCreate', async message => {
       leaveCollector.on('collect', async i => {
         if (!i.deferred && !i.replied) await i.deferUpdate().catch(() => {});
         if (i.user.id !== userId) return i.followUp({ content: toSmallCaps('Not your confirmation!'), ephemeral: true });
+        leaveCollector.stop();
 
         if (i.customId === 'confirm_leave') {
-          leaveCollector.stop();
           const targetClan = db.clans[clanName];
           if (targetClan) {
             targetClan.members = targetClan.members.filter(id => id !== userId);
             if (targetClan.roles) delete targetClan.roles[userId];
-            if (targetClan.members.length === 0) delete db.clans[clanName];
+            if (!targetClan.members.length) delete db.clans[clanName];
           }
           user.clan = null;
           await saveUsers();
           return leaveMsg.edit({ content: toSmallCaps(`✅ Successfully left the clan **${clanName}**.`), components: [] }).catch(() => {});
-        } else {
-          leaveCollector.stop();
-          return leaveMsg.edit({ content: toSmallCaps('❌ Clan leave request cancelled.'), components: [] }).catch(() => {});
         }
+        return leaveMsg.edit({ content: toSmallCaps('❌ Clan leave request cancelled.'), components: [] }).catch(() => {});
       });
       return;
     }
@@ -2661,7 +2261,7 @@ client.on('messageCreate', async message => {
         return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}clanrename [NewClanName] [Logo ID 1-12]\n*(Renames left: ${3 - currentRenameCount}/3)*\n\nAvailable Clan Logos:\n` + getClanLogoListText()));
       }
       if (!CLAN_LOGOS[newLogoArg]) {
-        return message.reply(toSmallCaps('❌ Invalid Logo ID! Please pick a number from 1 to 12 (ID 13+ is invalid).\n\nAvailable Clan Logos:\n' + getClanLogoListText()));
+        return message.reply(toSmallCaps('❌ Invalid Logo ID! Please pick a number from 1 to 12.\n\nAvailable Clan Logos:\n' + getClanLogoListText()));
       }
       if (newNameArg.length > 12) return message.reply(toSmallCaps('❌ Clan name cannot exceed 12 characters!'));
       if (db.clans[newNameArg] && newNameArg !== user.clan) return message.reply(toSmallCaps('❌ A clan with this name already exists!'));
@@ -2679,25 +2279,22 @@ client.on('messageCreate', async message => {
     if (command === 'ceditdesc') {
       if (!isTester(userId)) return message.reply(toSmallCaps('❌ This command is restricted to authorized beta testers only!'));
       if (!user.clan || !db.clans[user.clan]) return message.reply(toSmallCaps('❌ You are not in a clan!'));
-
       const clanObj = db.clans[user.clan];
-      const actorTier = CLAN_ROLE_HIERARCHY[getClanMemberRole(clanObj, userId)] || 0;
-      if (actorTier < CLAN_ROLE_HIERARCHY['Co-Leader']) return message.reply(toSmallCaps('❌ Only the Clan Leader or Co-Leader can edit the clan description!'));
-
+      if ((CLAN_ROLE_HIERARCHY[getClanMemberRole(clanObj, userId)] || 0) < CLAN_ROLE_HIERARCHY['Co-Leader']) {
+        return message.reply(toSmallCaps('❌ Only the Clan Leader or Co-Leader can edit the clan description!'));
+      }
       const newDesc = args.join(' ').trim();
       if (!newDesc) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}ceditdesc [description text] (or \`clear\` to reset)`));
       if (newDesc.length > 160) return message.reply(toSmallCaps('❌ Clan description cannot exceed 160 characters!'));
 
       clanObj.description = newDesc.toLowerCase() === 'clear' ? '' : newDesc;
       await saveUsers();
-      const displayDesc = clanObj.description ? clanObj.description : 'No Description of the clan';
-      return message.reply(toSmallCaps(`✅ Updated clan description for **${clanObj.name}**:\n`) + `${BETA_EMOJIS.CLAN_DESC}: ` + toSmallCaps(displayDesc));
+      return message.reply(toSmallCaps(`✅ Updated clan description for **${clanObj.name}**:\n`) + `${BETA_EMOJIS.CLAN_DESC}: ` + toSmallCaps(clanObj.description || 'No Description of the clan'));
     }
 
     if (command === 'cpromote') {
       if (!isTester(userId)) return message.reply(toSmallCaps('❌ This command is restricted to authorized beta testers only!'));
       if (!user.clan || !db.clans[user.clan]) return message.reply(toSmallCaps('❌ You are not in a clan!'));
-
       const clanObj = db.clans[user.clan];
       const actorRole = getClanMemberRole(clanObj, userId);
       const actorTier = CLAN_ROLE_HIERARCHY[actorRole] || 0;
@@ -2708,7 +2305,6 @@ client.on('messageCreate', async message => {
       if (!clanObj.members.includes(target.id)) return message.reply(toSmallCaps('❌ That user is not a member of your clan!'));
       if (target.id === clanObj.leader) return message.reply(toSmallCaps('❌ You cannot change the Clan Leader role!'));
 
-      const currentTargetRole = getClanMemberRole(clanObj, target.id);
       const row = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder().setCustomId('cpromote_select_role').setPlaceholder(toSmallCaps('Select which position to promote to')).addOptions([
           { label: 'Co-Leader', description: 'Can kick members below Co-Leader (Officer & Deputy)', value: 'Co-Leader' },
@@ -2717,7 +2313,7 @@ client.on('messageCreate', async message => {
         ])
       );
       const promptMsg = await message.reply({
-        content: toSmallCaps(`🎖️ **Clan Promotion UI**\nTarget: <@${target.id}> (Current: **${currentTargetRole}**)\nChoose which position you want to assign below:`),
+        content: toSmallCaps(`🎖️ **Clan Promotion UI**\nTarget: <@${target.id}> (Current: **${getClanMemberRole(clanObj, target.id)}**)\nChoose which position you want to assign below:`),
         components: [row]
       });
 
@@ -2725,7 +2321,6 @@ client.on('messageCreate', async message => {
       collector.on('collect', async i => {
         if (!i.deferred && !i.replied) await i.deferUpdate().catch(() => {});
         if (i.user.id !== userId) return i.followUp({ content: toSmallCaps('❌ Only the command sender can select the position!'), ephemeral: true });
-
         const chosenRole = i.values[0];
         if (actorRole !== 'Leader' && (CLAN_ROLE_HIERARCHY[chosenRole] || 0) >= actorTier) {
           return i.followUp({ content: toSmallCaps('❌ You cannot assign a position equal to or higher than your own rank!'), ephemeral: true });
@@ -2747,7 +2342,6 @@ client.on('messageCreate', async message => {
     if (command === 'kick') {
       if (!isTester(userId)) return message.reply(toSmallCaps('❌ This command is restricted to authorized beta testers only!'));
       if (!user.clan || !db.clans[user.clan]) return message.reply(toSmallCaps('❌ You are not in a clan!'));
-
       const clanObj = db.clans[user.clan];
       const actorRole = getClanMemberRole(clanObj, userId);
       const actorTier = CLAN_ROLE_HIERARCHY[actorRole] || 0;
@@ -2783,7 +2377,6 @@ client.on('messageCreate', async message => {
     if (command === 'cannounce') {
       if (!isTester(userId)) return message.reply(toSmallCaps('❌ This command is restricted to authorized beta testers only!'));
       if (!user.clan || !db.clans[user.clan]) return message.reply(toSmallCaps('❌ You are not in a clan!'));
-
       const clanObj = db.clans[user.clan];
       const actorRole = getClanMemberRole(clanObj, userId);
       if ((CLAN_ROLE_HIERARCHY[actorRole] || 0) < CLAN_ROLE_HIERARCHY.Officer) {
@@ -2805,30 +2398,18 @@ client.on('messageCreate', async message => {
 
     if (command === 'cmail') {
       if (!isTester(userId)) return message.reply(toSmallCaps('❌ This command is restricted to authorized beta testers only!'));
-      const mails = Array.isArray(user.clanMail) ? user.clanMail : [];
       const claimRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('cmail_claim_rewards_btn').setEmoji('1572814245848940707')
           .setLabel(toSmallCaps('Claim')).setStyle(ButtonStyle.Success)
       );
 
-      if (mails.length === 0) {
-        const container = new ContainerBuilder().setAccentColor(0x3498db).addTextDisplayComponents(
-          new TextDisplayBuilder().setContent(toSmallCaps('# 📬 Clan Mail Inbox\n\n*No clan mail yet. Announcements, season rewards, and clan status notices will appear here.*'))
-        );
-        const mailMsg = await message.reply({ components: [container, claimRow], flags: MessageFlags.IsComponentsV2 });
-        const mailCollector = mailMsg.createMessageComponentCollector({ time: 60000 });
-        mailCollector.on('collect', async i => {
-          if (!i.deferred && !i.replied) await i.deferUpdate().catch(() => {});
-          if (i.user.id !== userId) return i.followUp({ content: toSmallCaps('❌ Not your clan mail inbox!'), ephemeral: true });
-          if (i.customId === 'cmail_claim_rewards_btn') {
-            return i.followUp({ content: 'There is no claimable rewards in the mail.', ephemeral: true });
-          }
-        });
-        return;
-      }
-
       const renderMailContainer = () => {
         const currentMails = Array.isArray(user.clanMail) ? user.clanMail : [];
+        if (!currentMails.length) {
+          return new ContainerBuilder().setAccentColor(0x3498db).addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(toSmallCaps('# 📬 Clan Mail Inbox\n\n*No clan mail yet. Announcements, season rewards, and clan status notices will appear here.*'))
+          );
+        }
         const mailText = currentMails.slice(0, 6).map((m, idx) => {
           const rewardTag = m.reward ? (m.claimed ? ' *(Claimed)*' : ' *(Claimable Reward)*') : '';
           return toSmallCaps(`**[${idx + 1}] [${m.category}] ${m.title}** *(${new Date(m.timestamp).toLocaleDateString()})*`) + rewardTag + '\n' + toSmallCaps(`${m.body}`);
@@ -2844,50 +2425,48 @@ client.on('messageCreate', async message => {
       mailCollector.on('collect', async i => {
         if (!i.deferred && !i.replied) await i.deferUpdate().catch(() => {});
         if (i.user.id !== userId) return i.followUp({ content: toSmallCaps('❌ Not your clan mail inbox!'), ephemeral: true });
+        if (i.customId !== 'cmail_claim_rewards_btn') return;
 
-        if (i.customId === 'cmail_claim_rewards_btn') {
-          const currentMails = Array.isArray(user.clanMail) ? user.clanMail : [];
-          const claimableMails = currentMails.filter(m => m && m.reward && !m.claimed);
-          if (claimableMails.length === 0) {
-            return i.followUp({ content: 'There is no claimable rewards in the mail.', ephemeral: true });
-          }
-
-          if (!user.inventory) user.inventory = { chibis: [], items: { spray: 0, clover: 0 } };
-          if (!Array.isArray(user.inventory.chibis)) user.inventory.chibis = [];
-
-          const claimedSummaries = [];
-          for (const mailEntry of claimableMails) {
-            const rw = mailEntry.reward;
-            if (rw.type === 'chibi') {
-              const qty = Math.max(1, parseInt(rw.qty, 10) || 1);
-              const rarity = rw.rarity || 'SR';
-              const sampleChibi = gameData.chibis.find(c => c.name === rw.name && c.rarity === rarity)
-                || gameData.chibis.find(c => c.rarity === rarity) || gameData.chibis[0];
-              const chibiName = rw.name || sampleChibi.name;
-              const chibiEmoji = rw.emoji || sampleChibi.emoji;
-
-              for (let q = 0; q < qty; q++) {
-                const generatedId = new mongoose.Types.ObjectId().toString();
-                user.inventory.chibis.push({
-                  id: generatedId, chibiId: generatedId, name: chibiName, rarity,
-                  emoji: chibiEmoji, isShiny: false, level: 1, exp: 0, date: new Date().toLocaleDateString()
-                });
-              }
-              claimedSummaries.push(`${qty}x ${rarityIconsMap[rarity] || ''} ${chibiEmoji} ${chibiName}`);
-            } else if (rw.type === 'dice') {
-              const diceAmt = Math.max(1, parseInt(rw.dice, 10) || 0);
-              user.dice = Number(user.dice || 0) + diceAmt;
-              claimedSummaries.push(`${diceAmt}x ${BETA_EMOJIS.DICE} Dice`);
-            }
-            mailEntry.claimed = true;
-          }
-
-          updateUserRank(user);
-          await evaluateAndSyncUserBadges(userId, user, message.guild);
-          await saveUsers();
-          await mailMsg.edit({ components: [renderMailContainer(), claimRow], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
-          return i.followUp({ content: toSmallCaps(`✅ Claimed mail rewards: ${claimedSummaries.join(', ')}!`), ephemeral: true });
+        const claimableMails = (Array.isArray(user.clanMail) ? user.clanMail : []).filter(m => m?.reward && !m.claimed);
+        if (!claimableMails.length) {
+          return i.followUp({ content: 'There is no claimable rewards in the mail.', ephemeral: true });
         }
+
+        if (!user.inventory) user.inventory = { chibis: [], items: { spray: 0, clover: 0 } };
+        if (!Array.isArray(user.inventory.chibis)) user.inventory.chibis = [];
+
+        const claimedSummaries = [];
+        for (const mailEntry of claimableMails) {
+          const rw = mailEntry.reward;
+          if (rw.type === 'chibi') {
+            const qty = Math.max(1, parseInt(rw.qty, 10) || 1);
+            const rarity = rw.rarity || 'SR';
+            const sampleChibi = gameData.chibis.find(c => c.name === rw.name && c.rarity === rarity)
+              || gameData.chibis.find(c => c.rarity === rarity) || gameData.chibis[0];
+            const chibiName = rw.name || sampleChibi.name;
+            const chibiEmoji = rw.emoji || sampleChibi.emoji;
+
+            for (let q = 0; q < qty; q++) {
+              const generatedId = new mongoose.Types.ObjectId().toString();
+              user.inventory.chibis.push({
+                id: generatedId, chibiId: generatedId, name: chibiName, rarity,
+                emoji: chibiEmoji, isShiny: false, level: 1, exp: 0, date: new Date().toLocaleDateString()
+              });
+            }
+            claimedSummaries.push(`${qty}x ${rarityIconsMap[rarity] || ''} ${chibiEmoji} ${chibiName}`);
+          } else if (rw.type === 'dice') {
+            const diceAmt = Math.max(1, parseInt(rw.dice, 10) || 0);
+            user.dice = Number(user.dice || 0) + diceAmt;
+            claimedSummaries.push(`${diceAmt}x ${BETA_EMOJIS.DICE} Dice`);
+          }
+          mailEntry.claimed = true;
+        }
+
+        updateUserRank(user);
+        await evaluateAndSyncUserBadges(userId, user, message.guild);
+        await saveUsers();
+        await mailMsg.edit({ components: [renderMailContainer(), claimRow], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
+        return i.followUp({ content: toSmallCaps(`✅ Claimed mail rewards: ${claimedSummaries.join(', ')}!`), ephemeral: true });
       });
       return;
     }
@@ -2897,7 +2476,6 @@ client.on('messageCreate', async message => {
       const clan = db.clans[user.clan];
       const totalPoints = clan.members.reduce((acc, mId) => acc + (db.users[mId]?.points || 0), 0);
       const cleanClanName = clan.name.replace(/\*/g, '');
-      const logoEmoji = getClanLogoDisplay(clan.logoId);
       const leaderName = await getDisplayName(clan.leader);
 
       if (callerHasBetaView) {
@@ -2906,7 +2484,7 @@ client.on('messageCreate', async message => {
         })).sort((a, b) => b.pts - a.pts);
         const clanRankIdx = clanTotals.findIndex(c => c.cName === user.clan);
         const globalRankStatus = clanRankIdx !== -1 ? `#${clanRankIdx + 1}` : 'Unranked';
-        const clanDescText = clan.description && clan.description.trim().length > 0 ? clan.description.trim() : 'No Description of the clan';
+        const clanDescText = clan.description?.trim() || 'No Description of the clan';
 
         const memberLines = await Promise.all(clan.members.map(async (mId, idx) => {
           const mUser = db.users[mId];
@@ -2935,7 +2513,7 @@ client.on('messageCreate', async message => {
 
       const container = new ContainerBuilder().setAccentColor(0x1abc9c).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
-          toSmallCaps(`# CLAN: ${cleanClanName}   `) + `${logoEmoji}\n\n` +
+          toSmallCaps(`# CLAN: ${cleanClanName}   `) + `${getClanLogoDisplay(clan.logoId)}\n\n` +
           toSmallCaps(`LEADER: ${leaderName}\nTOTAL POINTS: ${totalPoints.toLocaleString()}\nRENAME USES LEFT: ${3 - (clan.renameCount || 0)}/3\n\nMEMBERS:\n`) +
           memberLines.join('\n')
         )
@@ -2944,11 +2522,9 @@ client.on('messageCreate', async message => {
     }
 
     if (command === 'tradehistory') {
-      if (!db.tradeHistories[userId] || db.tradeHistories[userId].length === 0) {
-        return message.reply(toSmallCaps('📜 You have no recorded trade history yet.'));
-      }
-      const historyLines = await Promise.all(db.tradeHistories[userId].slice(-10).reverse().map(async (entry, index) =>
-        toSmallCaps(`**${index + 1}.** Partner: **${await getDisplayName(entry.partnerId)}**\n   Date: ${new Date(entry.timestamp).toLocaleString()}`)
+      if (!db.tradeHistories[userId]?.length) return message.reply(toSmallCaps('📜 You have no recorded trade history yet.'));
+      const historyLines = await Promise.all(db.tradeHistories[userId].slice(-10).reverse().map(async (entry, idx) =>
+        toSmallCaps(`**${idx + 1}.** Partner: **${await getDisplayName(entry.partnerId)}**\n   Date: ${new Date(entry.timestamp).toLocaleString()}`)
       ));
       const container = new ContainerBuilder().setAccentColor(0x3498db).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(toSmallCaps('# 📜 Your Recent Trade History\n\n') + historyLines.join('\n\n'))
@@ -2974,157 +2550,141 @@ client.on('messageCreate', async message => {
       collector.on('collect', async i => {
         if (!i.deferred && !i.replied) await i.deferUpdate().catch(() => {});
         if (i.user.id !== target.id) return i.followUp({ content: toSmallCaps('This trade invitation is not for you!'), ephemeral: true });
+        collector.stop();
 
-        if (i.customId === 'trade_decline') {
-          collector.stop();
+        if (i.customId !== 'trade_accept') {
           return reqMsg.edit({ content: toSmallCaps(`❌ Trade invitation declined by <@${target.id}>.`), components: [] }).catch(() => {});
         }
 
-        if (i.customId === 'trade_accept') {
-          collector.stop();
-          const p1Offer = { dice: 0, chibi: null };
-          const p2Offer = { dice: 0, chibi: null };
+        const p1Offer = { dice: 0, chibi: null };
+        const p2Offer = { dice: 0, chibi: null };
 
-          const getEmbed = () => {
-            const getOfferText = (offer) => {
-              const parts = [];
-              if (offer.dice > 0) parts.push(`**${offer.dice} 🎲 Dice**`);
-              if (offer.chibi) parts.push(`${rarityIconsMap[offer.chibi.rarity]} ${offer.chibi.emoji} **${offer.chibi.name}** (Lv.${offer.chibi.level})`);
-              return parts.length > 0 ? parts.join(' + ') : '*Empty*';
-            };
-            return {
-              color: 0xf1c40f,
-              title: toSmallCaps('🤝 Active Trade Session'),
-              description: toSmallCaps(`<@${userId}> Offers:\n${getOfferText(p1Offer)}\n\n------------------\n\n<@${target.id}> Offers:\n${getOfferText(p2Offer)}`)
-            };
+        const getEmbed = () => {
+          const getOfferText = (offer) => {
+            const parts = [];
+            if (offer.dice > 0) parts.push(`**${offer.dice} 🎲 Dice**`);
+            if (offer.chibi) parts.push(`${rarityIconsMap[offer.chibi.rarity]} ${offer.chibi.emoji} **${offer.chibi.name}** (Lv.${offer.chibi.level})`);
+            return parts.length ? parts.join(' + ') : '*Empty*';
           };
+          return {
+            color: 0xf1c40f,
+            title: toSmallCaps('🤝 Active Trade Session'),
+            description: toSmallCaps(`<@${userId}> Offers:\n${getOfferText(p1Offer)}\n\n------------------\n\n<@${target.id}> Offers:\n${getOfferText(p2Offer)}`)
+          };
+        };
 
-          const tradeRows = [
-            new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setCustomId('trade_offer_dice').setLabel(toSmallCaps('Offer Dice [Qty] 🎲')).setStyle(ButtonStyle.Primary),
-              new ButtonBuilder().setCustomId('trade_offer_chibi').setLabel(toSmallCaps('Offer Chibi 🐾')).setStyle(ButtonStyle.Success)
-            ),
-            new ActionRowBuilder().addComponents(
-              new ButtonBuilder().setCustomId('trade_confirm').setLabel(toSmallCaps('Confirm Trade ✅')).setStyle(ButtonStyle.Secondary),
-              new ButtonBuilder().setCustomId('trade_cancel').setLabel(toSmallCaps('Cancel ❌')).setStyle(ButtonStyle.Danger)
-            )
-          ];
-          await reqMsg.edit({ content: '', embeds: [getEmbed()], components: tradeRows }).catch(() => {});
+        const tradeRows = [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('trade_offer_dice').setLabel(toSmallCaps('Offer Dice [Qty] 🎲')).setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('trade_offer_chibi').setLabel(toSmallCaps('Offer Chibi 🐾')).setStyle(ButtonStyle.Success)
+          ),
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('trade_confirm').setLabel(toSmallCaps('Confirm Trade ✅')).setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('trade_cancel').setLabel(toSmallCaps('Cancel ❌')).setStyle(ButtonStyle.Danger)
+          )
+        ];
+        await reqMsg.edit({ content: '', embeds: [getEmbed()], components: tradeRows }).catch(() => {});
 
-          const tradeCollector = reqMsg.createMessageComponentCollector({ time: 60000 });
-          tradeCollector.on('collect', async ti => {
-            if (!ti.deferred && !ti.replied) await ti.deferUpdate().catch(() => {});
-            const isP1 = ti.user.id === userId;
-            const isP2 = ti.user.id === target.id;
-            if (!isP1 && !isP2) return ti.followUp({ content: toSmallCaps('Not your trade session!'), ephemeral: true });
-            const currentOffer = isP1 ? p1Offer : p2Offer;
+        const tradeCollector = reqMsg.createMessageComponentCollector({ time: 60000 });
+        tradeCollector.on('collect', async ti => {
+          if (!ti.deferred && !ti.replied) await ti.deferUpdate().catch(() => {});
+          const isP1 = ti.user.id === userId;
+          const isP2 = ti.user.id === target.id;
+          if (!isP1 && !isP2) return ti.followUp({ content: toSmallCaps('Not your trade session!'), ephemeral: true });
+          const currentOffer = isP1 ? p1Offer : p2Offer;
 
-            if (ti.customId === 'trade_cancel') {
-              tradeCollector.stop();
-              return reqMsg.edit({ content: toSmallCaps(`❌ Trade cancelled by <@${ti.user.id}>.`), embeds: [], components: [] }).catch(() => {});
+          if (ti.customId === 'trade_cancel') {
+            tradeCollector.stop();
+            return reqMsg.edit({ content: toSmallCaps(`❌ Trade cancelled by <@${ti.user.id}>.`), embeds: [], components: [] }).catch(() => {});
+          }
+
+          if (ti.customId === 'trade_offer_dice') {
+            await ti.followUp({ content: toSmallCaps('🎲 Type the amount of Dice you want to offer in chat (e.g. 50):'), ephemeral: true });
+            const msgs = await ti.channel.awaitMessages({ filter: m => m.author.id === ti.user.id, max: 1, time: 20000 }).catch(() => null);
+            const m = msgs?.first();
+            if (!m) return;
+            const amt = parseInt(m.content, 10);
+            const uObj = db.users[ti.user.id];
+            await m.delete().catch(() => {});
+            if (isNaN(amt) || amt <= 0) return ti.followUp({ content: toSmallCaps('❌ Invalid dice amount!'), ephemeral: true });
+            if (uObj.dice < amt) return ti.followUp({ content: toSmallCaps(`❌ You don't have enough dice! You have ${uObj.dice} 🎲.`), ephemeral: true });
+            currentOffer.dice = amt;
+            return reqMsg.edit({ embeds: [getEmbed()], components: tradeRows }).catch(() => {});
+          }
+
+          if (ti.customId === 'trade_offer_chibi') {
+            const uObj = db.users[ti.user.id];
+            if (!uObj.inventory?.chibis?.length) {
+              return ti.followUp({ content: toSmallCaps('❌ You have no chibis in your inventory to offer!'), ephemeral: true });
             }
-
-            if (ti.customId === 'trade_offer_dice') {
-              await ti.followUp({ content: toSmallCaps('🎲 Type the amount of Dice you want to offer in chat (e.g. 50):'), ephemeral: true });
-              const msgs = await ti.channel.awaitMessages({ filter: m => m.author.id === ti.user.id, max: 1, time: 20000 }).catch(() => null);
-              const m = msgs?.first();
-              if (!m) return;
-              const amt = parseInt(m.content, 10);
-              const uObj = db.users[ti.user.id];
-              await m.delete().catch(() => {});
-              if (isNaN(amt) || amt <= 0) return ti.followUp({ content: toSmallCaps('❌ Invalid dice amount!'), ephemeral: true });
-              if (uObj.dice < amt) return ti.followUp({ content: toSmallCaps(`❌ You don't have enough dice! You have ${uObj.dice} 🎲.`), ephemeral: true });
-              currentOffer.dice = amt;
+            const menuRow = new ActionRowBuilder().addComponents(
+              new StringSelectMenuBuilder().setCustomId('trade_select_chibi').setPlaceholder(toSmallCaps('Select a Chibi to offer')).addOptions(
+                uObj.inventory.chibis.slice(0, 25).map(c => ({ label: `${c.name} (${c.rarity}) Lv.${c.level}`.slice(0, 100), value: c.chibiId || c.id }))
+              )
+            );
+            await ti.followUp({ content: toSmallCaps('Choose a chibi from your inventory below:'), components: [menuRow], ephemeral: true });
+            const selection = await ti.channel.awaitMessageComponent({
+              filter: int => int.user.id === ti.user.id && int.customId === 'trade_select_chibi', time: 25000
+            }).catch(() => null);
+            if (!selection) return;
+            if (!selection.deferred && !selection.replied) await selection.deferUpdate().catch(() => {});
+            const chosenChibi = uObj.inventory.chibis.find(c => (c.chibiId || c.id) === selection.values[0]);
+            if (chosenChibi) {
+              currentOffer.chibi = chosenChibi;
               return reqMsg.edit({ embeds: [getEmbed()], components: tradeRows }).catch(() => {});
             }
+            return;
+          }
 
-            if (ti.customId === 'trade_offer_chibi') {
-              const uObj = db.users[ti.user.id];
-              if (!uObj.inventory.chibis || uObj.inventory.chibis.length === 0) {
-                return ti.followUp({ content: toSmallCaps('❌ You have no chibis in your inventory to offer!'), ephemeral: true });
-              }
-              const menuRow = new ActionRowBuilder().addComponents(
-                new StringSelectMenuBuilder().setCustomId('trade_select_chibi').setPlaceholder(toSmallCaps('Select a Chibi to offer')).addOptions(
-                  uObj.inventory.chibis.slice(0, 25).map(c => ({ label: `${c.name} (${c.rarity}) Lv.${c.level}`.slice(0, 100), value: c.chibiId || c.id }))
-                )
-              );
-              await ti.followUp({ content: toSmallCaps('Choose a chibi from your inventory below:'), components: [menuRow], ephemeral: true });
-
-              const selection = await ti.channel.awaitMessageComponent({
-                filter: int => int.user.id === ti.user.id && int.customId === 'trade_select_chibi', time: 25000
-              }).catch(() => null);
-              if (!selection) return;
-              if (!selection.deferred && !selection.replied) await selection.deferUpdate().catch(() => {});
-
-              const chosenChibi = uObj.inventory.chibis.find(c => (c.chibiId || c.id) === selection.values[0]);
-              if (chosenChibi) {
-                currentOffer.chibi = chosenChibi;
-                return reqMsg.edit({ embeds: [getEmbed()], components: tradeRows }).catch(() => {});
-              }
-              return;
+          if (ti.customId === 'trade_confirm') {
+            const u1 = db.users[userId];
+            const u2 = db.users[target.id];
+            if ((!p1Offer.dice && !p1Offer.chibi) || (!p2Offer.dice && !p2Offer.chibi)) {
+              return ti.followUp({ content: toSmallCaps('❌ Both players must offer at least something (dice or chibi) before confirming!'), ephemeral: true });
+            }
+            if (u1.dice < p1Offer.dice || u2.dice < p2Offer.dice) {
+              return ti.followUp({ content: toSmallCaps('❌ One of the players no longer has enough dice for this trade!'), ephemeral: true });
             }
 
-            if (ti.customId === 'trade_confirm') {
-              const u1 = db.users[userId];
-              const u2 = db.users[target.id];
-              if (!(p1Offer.dice > 0 || p1Offer.chibi !== null) || !(p2Offer.dice > 0 || p2Offer.chibi !== null)) {
-                return ti.followUp({ content: toSmallCaps('❌ Both players must offer at least something (dice or chibi) before confirming!'), ephemeral: true });
+            const transferOffer = (fromU, toU, offer) => {
+              if (offer.dice > 0) {
+                fromU.dice -= offer.dice;
+                toU.dice = Number(toU.dice || 0) + offer.dice;
               }
-              if (u1.dice < p1Offer.dice || u2.dice < p2Offer.dice) {
-                return ti.followUp({ content: toSmallCaps('❌ One of the players no longer has enough dice for this trade!'), ephemeral: true });
-              }
-
-              if (p1Offer.dice > 0) { u1.dice -= p1Offer.dice; u2.dice = Number(u2.dice || 0) + p1Offer.dice; }
-              if (p1Offer.chibi) {
-                const movedId = p1Offer.chibi.chibiId || p1Offer.chibi.id;
-                const idx = u1.inventory.chibis.findIndex(c => (c.chibiId || c.id) === movedId);
+              if (offer.chibi) {
+                const movedId = offer.chibi.chibiId || offer.chibi.id;
+                const idx = fromU.inventory.chibis.findIndex(c => (c.chibiId || c.id) === movedId);
                 if (idx !== -1) {
-                  u2.inventory.chibis.push(u1.inventory.chibis.splice(idx, 1)[0]);
-                  u1.team = (u1.team || [null, null, null]).map(slotId => (slotId === movedId ? null : slotId));
-                  if (u1.equippedChibi === movedId) u1.equippedChibi = u1.team[0] || null;
+                  toU.inventory.chibis.push(fromU.inventory.chibis.splice(idx, 1)[0]);
+                  fromU.team = (fromU.team || [null, null, null]).map(slotId => (slotId === movedId ? null : slotId));
+                  if (fromU.equippedChibi === movedId) fromU.equippedChibi = fromU.team[0] || null;
                 }
               }
-              if (p2Offer.dice > 0) { u2.dice -= p2Offer.dice; u1.dice = Number(u1.dice || 0) + p2Offer.dice; }
-              if (p2Offer.chibi) {
-                const movedId = p2Offer.chibi.chibiId || p2Offer.chibi.id;
-                const idx = u2.inventory.chibis.findIndex(c => (c.chibiId || c.id) === movedId);
-                if (idx !== -1) {
-                  u1.inventory.chibis.push(u2.inventory.chibis.splice(idx, 1)[0]);
-                  u2.team = (u2.team || [null, null, null]).map(slotId => (slotId === movedId ? null : slotId));
-                  if (u2.equippedChibi === movedId) u2.equippedChibi = u2.team[0] || null;
-                }
-              }
+            };
 
-              if (!db.tradeHistories[userId]) db.tradeHistories[userId] = [];
-              if (!db.tradeHistories[target.id]) db.tradeHistories[target.id] = [];
-              const tradeTimestamp = Date.now();
-              db.tradeHistories[userId].push({ partnerId: target.id, timestamp: tradeTimestamp });
-              db.tradeHistories[target.id].push({ partnerId: userId, timestamp: tradeTimestamp });
+            transferOffer(u1, u2, p1Offer);
+            transferOffer(u2, u1, p2Offer);
 
-              updateUserRank(u1);
-              updateUserRank(u2);
-              await evaluateAndSyncUserBadges(userId, u1, message.guild);
-              await evaluateAndSyncUserBadges(target.id, u2, message.guild);
-              await saveUsers();
-              tradeCollector.stop();
+            const tradeTimestamp = Date.now();
+            (db.tradeHistories[userId] ||= []).push({ partnerId: target.id, timestamp: tradeTimestamp });
+            (db.tradeHistories[target.id] ||= []).push({ partnerId: userId, timestamp: tradeTimestamp });
 
-              return reqMsg.edit({
-                content: toSmallCaps(`✅ Trade successfully completed between <@${userId}> and <@${target.id}>!`),
-                embeds: [getEmbed()], components: []
-              }).catch(() => {});
-            }
-          });
-        }
+            updateUserRank(u1);
+            updateUserRank(u2);
+            await evaluateAndSyncUserBadges(userId, u1, message.guild);
+            await evaluateAndSyncUserBadges(target.id, u2, message.guild);
+            await saveUsers();
+            tradeCollector.stop();
+
+            return reqMsg.edit({
+              content: toSmallCaps(`✅ Trade successfully completed between <@${userId}> and <@${target.id}>!`),
+              embeds: [getEmbed()], components: []
+            }).catch(() => {});
+          }
+        });
       });
       return;
     }
-
-    const checkAdminMainServer = (msg) => {
-      if (!msg.guild) return false;
-      if (!db.config.ownerId) db.config.ownerId = userId;
-      if (!db.config.mainGuildId) db.config.mainGuildId = msg.guild.id;
-      return (userId === db.config.ownerId || user.permissions === true) && msg.guild.id === db.config.mainGuildId;
-    };
 
     if (command === 'fixadmin') {
       db.config.ownerId = userId;
@@ -3139,8 +2699,8 @@ client.on('messageCreate', async message => {
       if (!isOwner()) return;
       const container = new ContainerBuilder().setAccentColor(0xe74c3c).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(toSmallCaps(
-          `# 🕵️‍♂️ Secret Owner Control Panel\n\nWelcome, Supreme Master. Here are your hidden master controls:\n` +
-          `• Total Registered Users: ${Object.keys(db.users).length}\n• Total Active Clans: ${Object.keys(db.clans).length}\n• Connected Guilds: ${client.guilds.cache.size}\n\nUse your designated admin/owner commands safely.`
+          `# 🕵️‍♂️ Secret Owner Control Panel\n\n` +
+          `• Total Registered Users: ${Object.keys(db.users).length}\n• Total Active Clans: ${Object.keys(db.clans).length}\n• Connected Guilds: ${client.guilds.cache.size}`
         ))
       );
       return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
@@ -3171,8 +2731,7 @@ client.on('messageCreate', async message => {
       const template = EVENT_CHIBIS_POOL.find(c => c.id === selection.values[0]);
       if (!template) return promptMsg.edit({ content: toSmallCaps('❌ Selected chibi not found.'), components: [] }).catch(() => {});
       const generatedId = new mongoose.Types.ObjectId().toString();
-      if (!db.users[target.id].inventory.chibis) db.users[target.id].inventory.chibis = [];
-      db.users[target.id].inventory.chibis.push({
+      (db.users[target.id].inventory.chibis ||= []).push({
         id: generatedId, chibiId: generatedId, name: template.name, rarity: 'SSRP',
         emoji: template.emoji, isShiny: false, level: 1, exp: 0, date: new Date().toLocaleDateString()
       });
@@ -3190,7 +2749,6 @@ client.on('messageCreate', async message => {
       if (![1, 2, 3].includes(rankPos) || isNaN(qty) || !rarity || !emoji) {
         return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}adminsetclanrewards [1|2|3] [qty] [rarity] [Emoji]\nExample: ${currentPrefix}adminsetclanrewards 1 5 UTR 🌟`));
       }
-      if (!db.config.clanRewards) db.config.clanRewards = {};
       db.config.clanRewards[rankPos] = { qty, rarity, chibiEmoji: emoji };
       await saveUsers();
       return message.reply(toSmallCaps(`✅ Successfully updated Rank ${rankPos} clan reward to ${qty}x ${rarity} (${emoji})!`));
@@ -3199,9 +2757,9 @@ client.on('messageCreate', async message => {
     if (command === 'owneradminpermsrem') {
       if (!isOwner()) return message.reply(toSmallCaps('❌ Only the bot owner can execute this command!'));
       let count = 0;
-      for (const uId of Object.keys(db.users)) {
-        if (db.users[uId].permissions === true && uId !== db.config.ownerId) {
-          db.users[uId].permissions = false;
+      for (const [uId, uData] of Object.entries(db.users)) {
+        if (uData.permissions === true && uId !== db.config.ownerId) {
+          uData.permissions = false;
           count++;
         }
       }
@@ -3223,28 +2781,22 @@ client.on('messageCreate', async message => {
       return message.reply(toSmallCaps(`✅ Successfully updated server prefix to \`${newPrefix}\`! Use ${newPrefix}help for commands.`));
     }
 
-    if (command === 'enablec') {
+    if (command === 'enablec' || command === 'disablec') {
       if (!message.guild) return message.reply(toSmallCaps('❌ This command can only be used inside a server.'));
       if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
         return message.reply(toSmallCaps('❌ You must have Administrator permissions to manage channel restrictions.'));
       }
-      if (!db.channelRestrictions[guildId]) db.channelRestrictions[guildId] = [];
-      const index = db.channelRestrictions[guildId].indexOf(message.channel.id);
-      if (index !== -1) {
-        db.channelRestrictions[guildId].splice(index, 1);
-        await saveUsers();
+      const list = (db.channelRestrictions[guildId] ||= []);
+      const idx = list.indexOf(message.channel.id);
+      if (command === 'enablec') {
+        if (idx !== -1) {
+          list.splice(idx, 1);
+          await saveUsers();
+        }
+        return message.reply(toSmallCaps(`✅ Chibi bot commands are now enabled in <#${message.channel.id}>.`));
       }
-      return message.reply(toSmallCaps(`✅ Chibi bot commands are now enabled in <#${message.channel.id}>.`));
-    }
-
-    if (command === 'disablec') {
-      if (!message.guild) return message.reply(toSmallCaps('❌ This command can only be used inside a server.'));
-      if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return message.reply(toSmallCaps('❌ You must have Administrator permissions to manage channel restrictions.'));
-      }
-      if (!db.channelRestrictions[guildId]) db.channelRestrictions[guildId] = [];
-      if (!db.channelRestrictions[guildId].includes(message.channel.id)) {
-        db.channelRestrictions[guildId].push(message.channel.id);
+      if (idx === -1) {
+        list.push(message.channel.id);
         await saveUsers();
       }
       return message.reply(toSmallCaps(`❌ Chibi bot commands are now disabled in <#${message.channel.id}>.`));
@@ -3261,7 +2813,13 @@ client.on('messageCreate', async message => {
     }
 
     if (command.startsWith('admin')) {
-      if (!checkAdminMainServer(message)) {
+      const inMainServer = Boolean(message.guild) &&
+        (userId === (db.config.ownerId || userId) || user.permissions === true) &&
+        message.guild.id === (db.config.mainGuildId || message.guild.id);
+      if (!db.config.ownerId) db.config.ownerId = userId;
+      if (!db.config.mainGuildId && message.guild) db.config.mainGuildId = message.guild.id;
+
+      if (!inMainServer) {
         return message.reply('You cannot use this Admin power in your own server, you must in the main server to run this.');
       }
 
@@ -3270,7 +2828,6 @@ client.on('messageCreate', async message => {
         const amount = parseInt(args[1], 10);
         if (!target || isNaN(amount)) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}admingivecrystal [@user] [amount]`));
         ensureUser(target.id);
-        if (!db.config.eventCrystals) db.config.eventCrystals = {};
         db.config.eventCrystals[target.id] = (db.config.eventCrystals[target.id] || 0) + amount;
         await saveUsers();
         return message.reply(toSmallCaps(`🛡️ Successfully granted ${amount.toLocaleString()} Event Crystals ${EVENT_ICONS.CRYSTAL} to <@${target.id}>.`));
@@ -3285,9 +2842,9 @@ client.on('messageCreate', async message => {
       }
 
       if (command === 'adminresetrank') {
-        for (const uId of Object.keys(db.users)) {
-          db.users[uId].points = 0;
-          updateUserRank(db.users[uId]);
+        for (const u of Object.values(db.users)) {
+          u.points = 0;
+          updateUserRank(u);
         }
         await saveUsers();
         return message.reply(toSmallCaps('🛡️ Successfully reset all user ranks and points! Leaderboard season remains active.'));
@@ -3295,9 +2852,9 @@ client.on('messageCreate', async message => {
 
       if (command === 'adminsetnn') {
         const target = message.mentions.users.first();
-        const newNN = args.slice(1).join(' ');
+        const newNN = args.slice(1).join(' ').trim();
         if (!target || !newNN) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}adminsetnn [@user] [nickname]`));
-        if (!db.users[target.id] || !db.users[target.id].started) return message.reply(toSmallCaps('❌ User does not have Chibi RNG data or has not started yet!'));
+        if (!db.users[target.id]?.started) return message.reply(toSmallCaps('❌ User does not have Chibi RNG data or has not started yet!'));
         if (newNN.length > 12) return message.reply(toSmallCaps('❌ Nickname cannot exceed 12 characters!'));
         db.users[target.id].customNickname = newNN;
         await saveUsers();
@@ -3320,12 +2877,12 @@ client.on('messageCreate', async message => {
       }
 
       if (command === 'adminclearlb') {
-        for (const uId of Object.keys(db.users)) {
-          db.users[uId].points = 0;
-          db.users[uId].highestSeasonPoints = 0;
-          updatePeakRank(db.users[uId]);
-          db.users[uId].customNickname = null;
-          updateUserRank(db.users[uId]);
+        for (const u of Object.values(db.users)) {
+          u.points = 0;
+          u.highestSeasonPoints = 0;
+          updatePeakRank(u);
+          u.customNickname = null;
+          updateUserRank(u);
         }
         await saveUsers();
         return message.reply(toSmallCaps('⚠️ Admin Warning: All names, ranks, and points in the leaderboard have been completely cleared!'));
@@ -3362,13 +2919,10 @@ client.on('messageCreate', async message => {
         const tUser = db.users[target.id];
         if (!tUser.inventory.items) tUser.inventory.items = { spray: 0, clover: 0 };
 
-        if (item === 'dice') {
-          tUser.dice = Number(tUser.dice || 0) + amount;
-        } else if (item === 'spray' || item === 'clover') {
-          tUser.inventory.items[item] = Number(tUser.inventory.items[item] || 0) + amount;
-        } else {
-          return message.reply(toSmallCaps('❌ Unknown item! Available items: `dice`, `spray`, `clover`.'));
-        }
+        if (item === 'dice') tUser.dice = Number(tUser.dice || 0) + amount;
+        else if (item === 'spray' || item === 'clover') tUser.inventory.items[item] = Number(tUser.inventory.items[item] || 0) + amount;
+        else return message.reply(toSmallCaps('❌ Unknown item! Available items: `dice`, `spray`, `clover`.'));
+
         updateUserRank(tUser);
         await evaluateAndSyncUserBadges(target.id, tUser, message.guild);
         await saveUsers();
