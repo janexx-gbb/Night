@@ -555,7 +555,7 @@ async function execute({ command, args, message, userId, currentPrefix, user }) 
       newNpc,
       `🎉 ` + toSmallCaps(`Congratulations ${username}, you obtained `) +
       `**Level ${newNpc.level} ${newNpc.name}**${shinyTag} ` +
-      toSmallCaps(`(Tier: **${newNpc.tier}** • ID: **${newNpc.slotId}**)`)`,
+      toSmallCaps(`(Tier: **${newNpc.tier}** • ID: **${newNpc.slotId}**)`) ,
       newNpc.isShiny ? 0xf1c40f : 0x2ecc71
     );
     return true;
