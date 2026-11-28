@@ -685,4 +685,4 @@ module.exports = {
   processNpcChatOrBotActivity,
   handleNpcInteraction,
   execute
-}; 
+};
