@@ -454,9 +454,9 @@ async function execute(ctx) {
         `• \`${currentPrefix}ownergivechibi [@user]\` — Gift exclusive SSRP event chibis\n` +
         `• \`${currentPrefix}adminsetclanrewards\` — Configure seasonal clan rewards\n` +
         `• \`${currentPrefix}fixadmin\` — Assign yourself as main owner & server\n` +
-        `• \`${currentPrefix}asnlvl [Npc ID] [1-100]\` — Set NPC level (Main server owner only)\n` +
-        `• \`${currentPrefix}ast [Npc ID] [Tier]\` — Set NPC tier (Main server owner only)\n` +
-        `• \`${currentPrefix}aeventnpcxp\` / \`${currentPrefix}aen [mult] [time]\` — NPC EXP event (Main server owner only)`
+        `• \`${currentPrefix}asnlvl [Npc ID] [1-100] [@user]\` — Set NPC level *(Main server owner)*\n` +
+        `• \`${currentPrefix}ast [Npc ID] [Tier] [@user]\` — Set NPC tier *(Main server owner)*\n` +
+        `• \`${currentPrefix}aeventnpcxp\` (\`${currentPrefix}aen\`) \`[mult] [time]\` — NPC EXP event *(Main server owner)*`
       ))
     );
     return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
@@ -478,9 +478,6 @@ async function execute(ctx) {
         `• \`${currentPrefix}admingiveitem [@user] [item] [qty]\` — Grant items or dice\n` +
         `• \`${currentPrefix}adminsetnn [@user] [name]\` — Set custom user nickname\n` +
         `• \`${currentPrefix}adminclearlb\` — Clear leaderboard data\n` +
-        `• \`${currentPrefix}asnlvl [Npc ID] [1-100] [@user]\` — Set NPC level *(Owner, main server)*\n` +
-        `• \`${currentPrefix}ast [Npc ID] [Tier] [@user]\` — Set NPC tier *(Owner, main server)*\n` +
-        `• \`${currentPrefix}aeventnpcxp\` (\`${currentPrefix}aen\`) \`[mult] [time]\` — NPC EXP event *(Owner, main server)*\n` +
         `• \`${currentPrefix}admingivepermission [@user]\` — Grant admin rights *(Owner only)*`
       ))
     );
