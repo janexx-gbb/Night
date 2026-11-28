@@ -9,6 +9,9 @@ const {
   isTester, toSmallCaps, updateUserRank, updatePeakRank,
   evaluateAndSyncUserBadges, ensureUser, parseDurationToMs
 } = require('../core/helpers');
+const {
+  NPC_TIERS, MAX_LEVEL, ensureNpcUserFields, reindexNpcIds
+} = require('./npccommands');
 
 const ADMIN_CMDS = [
   'addtester', 'removetester', 'testerpanel', 'testerfeatures', 'admingivebadges',
@@ -18,8 +21,11 @@ const ADMIN_CMDS = [
   'owneradminpermsrem', 'prefixchange', 'enablec', 'disablec', 'removeadminperms',
   'admingivecrystal', 'adminsetlbseason', 'adminresetrank', 'adminsetnn',
   'adminban', 'adminclearlb', 'adminluckevent', 'adminsetxp', 'admingiveitem',
-  'adminsetrank', 'adminsetpoints', 'admingivepermission', 'adminsetlevel'
+  'adminsetrank', 'adminsetpoints', 'admingivepermission', 'adminsetlevel',
+  'asnlvl', 'ast', 'aeventnpcxp', 'aen'
 ];
+
+const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 function resolveCatalogBadgeKey(rawKey) {
   if (!rawKey || typeof rawKey !== 'string') return null;
@@ -58,9 +64,191 @@ function formatBadgeCatalogLines(categoryName) {
   return entries.map(b => `${b.icon} **\`${b.key}\`** — ${b.description}`).join('\n');
 }
 
+function isOwnerInMainServer(message, userId, isOwner) {
+  if (!message?.guild) return false;
+  if (!db.config || typeof db.config !== 'object') db.config = {};
+  if (!db.config.ownerId) db.config.ownerId = userId;
+  if (!db.config.mainGuildId) db.config.mainGuildId = message.guild.id;
+
+  const ownerFlag = typeof isOwner === 'function' ? isOwner() : userId === db.config.ownerId;
+  return Boolean(ownerFlag && userId === db.config.ownerId && message.guild.id === db.config.mainGuildId);
+}
+
+function resolveTargetNpc(targetUser, npcIdToken) {
+  ensureNpcUserFields(targetUser);
+  reindexNpcIds(targetUser);
+  if (!Array.isArray(targetUser.npcs) || !targetUser.npcs.length) return null;
+
+  const num = Number.parseInt(npcIdToken, 10);
+  if (!Number.isNaN(num)) {
+    const bySlot = targetUser.npcs.find(n => Number(n.slotId) === num);
+    if (bySlot) return bySlot;
+    if (num >= 1 && num <= targetUser.npcs.length) return targetUser.npcs[num - 1];
+  }
+  if (npcIdToken) {
+    const byUid = targetUser.npcs.find(n => n.uid === npcIdToken);
+    if (byUid) return byUid;
+  }
+  return null;
+}
+
+function findNpcTierDef(rawTier) {
+  if (!rawTier || typeof rawTier !== 'string') return null;
+  const q = rawTier.trim().toLowerCase();
+  return NPC_TIERS.find(t => t.name.toLowerCase() === q) || null;
+}
+
+function buildNpcTierListText(prefix, npcIdHint = '[Npc ID]') {
+  const rows = NPC_TIERS.map(t =>
+    `• **\`${t.name}\`** — HP \`${t.hp[0]}–${t.hp[1]}\` | ATK \`${t.atk[0]}–${t.atk[1]}\` | DEF \`${t.def[0]}–${t.def[1]}\` | SPD \`${t.spd[0]}–${t.spd[1]}\``
+  ).join('\n');
+
+  return (
+    `# 📊 ` + toSmallCaps('NPC Tiers List') + `\n\n` +
+    `${rows}\n\n` +
+    toSmallCaps(`Usage: \`${prefix}ast ${npcIdHint} [Tier] [@user]\``)
+  );
+}
+
 async function execute(ctx) {
   const { command, args, message, client, userId, guildId, currentPrefix, user, isOwner, isAdmin } = ctx;
   if (!ADMIN_CMDS.includes(command)) return false;
+
+  // +asnlvl [Npc ID] [level 100 is maximum] [@user] — Owner + Main Server ONLY
+  if (command === 'asnlvl') {
+    if (!isOwnerInMainServer(message, userId, isOwner)) {
+      return message.reply(toSmallCaps('❌ Only the bot owner can use this command in the main server!'));
+    }
+
+    const mentionedUser = message.mentions.users.first();
+    const cleanArgs = args.filter(a => !/^<@!?\d+>$/.test(a));
+    const npcIdArg = cleanArgs[0];
+    const levelArg = Number.parseInt(cleanArgs[1], 10);
+    const maxLvl = MAX_LEVEL || 100;
+
+    if (!npcIdArg || Number.isNaN(levelArg) || levelArg < 1 || levelArg > maxLvl) {
+      return message.reply(
+        toSmallCaps(`❌ Usage: \`${currentPrefix}asnlvl [Npc ID] [level 1–${maxLvl}] [@user]\``)
+      );
+    }
+
+    const targetDiscordUser = mentionedUser || message.author;
+    ensureUser(targetDiscordUser.id);
+    const targetData = db.users[targetDiscordUser.id];
+    const npc = resolveTargetNpc(targetData, npcIdArg);
+
+    if (!npc) {
+      return message.reply(
+        toSmallCaps(`❌ NPC with ID \`${npcIdArg}\` not found for <@${targetDiscordUser.id}>!`)
+      );
+    }
+
+    npc.level = levelArg;
+    npc.xp = 0;
+    await saveUsers();
+
+    return message.reply(
+      toSmallCaps(`👑 Set `) + `**${npc.name}**` +
+      toSmallCaps(` (ID \`${npc.slotId}\` • <@${targetDiscordUser.id}>) to **Level ${npc.level}**!`)
+    );
+  }
+
+  // +ast [Npc ID] [Tier] [@user] — Owner + Main Server ONLY
+  if (command === 'ast') {
+    if (!isOwnerInMainServer(message, userId, isOwner)) {
+      return message.reply(toSmallCaps('❌ Only the bot owner can use this command in the main server!'));
+    }
+
+    const mentionedUser = message.mentions.users.first();
+    const cleanArgs = args.filter(a => !/^<@!?\d+>$/.test(a));
+    const npcIdArg = cleanArgs[0];
+    const tierArg = cleanArgs.slice(1).join(' ').trim();
+
+    if (!npcIdArg || !tierArg) {
+      const container = new ContainerBuilder()
+        .setAccentColor(0x5865f2)
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(buildNpcTierListText(currentPrefix, npcIdArg || '[Npc ID]'))
+        );
+      return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+    }
+
+    const tierDef = findNpcTierDef(tierArg);
+    if (!tierDef) {
+      const container = new ContainerBuilder()
+        .setAccentColor(0xe74c3c)
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(
+            toSmallCaps(`❌ Unknown tier \`${tierArg}\`!\n\n`) +
+            buildNpcTierListText(currentPrefix, npcIdArg)
+          )
+        );
+      return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
+    }
+
+    const targetDiscordUser = mentionedUser || message.author;
+    ensureUser(targetDiscordUser.id);
+    const targetData = db.users[targetDiscordUser.id];
+    const npc = resolveTargetNpc(targetData, npcIdArg);
+
+    if (!npc) {
+      return message.reply(
+        toSmallCaps(`❌ NPC with ID \`${npcIdArg}\` not found for <@${targetDiscordUser.id}>!`)
+      );
+    }
+
+    npc.tier = tierDef.name;
+    npc.baseHp = randInt(tierDef.hp[0], tierDef.hp[1]);
+    npc.baseAtk = randInt(tierDef.atk[0], tierDef.atk[1]);
+    npc.baseDef = randInt(tierDef.def[0], tierDef.def[1]);
+    npc.baseSpd = randInt(tierDef.spd[0], tierDef.spd[1]);
+    await saveUsers();
+
+    return message.reply(
+      toSmallCaps(`👑 Set `) + `**${npc.name}**` +
+      toSmallCaps(` (ID \`${npc.slotId}\` • <@${targetDiscordUser.id}>) tier to **${tierDef.name}**!`)
+    );
+  }
+
+  // +aeventnpcxp or +aen [exp multiplier] [duration] — Owner + Main Server ONLY
+  if (command === 'aeventnpcxp' || command === 'aen') {
+    if (!isOwnerInMainServer(message, userId, isOwner)) {
+      return message.reply(toSmallCaps('❌ Only the bot owner can use this command in the main server!'));
+    }
+
+    if (!args[0]) {
+      db.config.globalNpcXpMultiplier = 1;
+      db.config.npcXpEventExpires = 0;
+      await saveUsers();
+      return message.reply(toSmallCaps('🔄 NPC EXP Event reset to normal (`1x`).'));
+    }
+
+    const mult = Number.parseFloat(args[0]);
+    if (Number.isNaN(mult) || mult <= 0) {
+      return message.reply(
+        toSmallCaps(`❌ Usage: \`${currentPrefix}${command} [exp multiplier] [optional duration like 30m, 1h]\``)
+      );
+    }
+
+    let expiresAt = 0;
+    let durationLabel = 'until reset';
+    if (args[1]) {
+      const ms = parseDurationToMs(args[1]);
+      if (!ms) {
+        return message.reply(toSmallCaps('❌ Invalid duration! Use formats like `30m`, `1h`, or `1d`.'));
+      }
+      expiresAt = Date.now() + ms;
+      durationLabel = `for **${args[1]}**`;
+    }
+
+    db.config.globalNpcXpMultiplier = mult;
+    db.config.npcXpEventExpires = expiresAt;
+    await saveUsers();
+
+    return message.reply(
+      toSmallCaps(`⚡ NPC EXP Event Activated! NPC EXP multiplier set to **${mult}x** ${durationLabel} (NPCs only).`)
+    );
+  }
 
   if (command === 'addtester') {
     if (!isOwner() && !user.permissions) return message.reply(toSmallCaps('❌ Only bot owners or admins can manage testers!'));
@@ -252,7 +440,10 @@ async function execute(ctx) {
         `• \`${currentPrefix}owneradminpermsrem\` — Revoke admin permissions from all users\n` +
         `• \`${currentPrefix}ownergivechibi [@user]\` — Gift exclusive SSRP event chibis\n` +
         `• \`${currentPrefix}adminsetclanrewards\` — Configure seasonal clan rewards\n` +
-        `• \`${currentPrefix}fixadmin\` — Assign yourself as main owner & server`
+        `• \`${currentPrefix}fixadmin\` — Assign yourself as main owner & server\n` +
+        `• \`${currentPrefix}asnlvl [Npc ID] [1-100]\` — Set NPC level (Main server owner only)\n` +
+        `• \`${currentPrefix}ast [Npc ID] [Tier]\` — Set NPC tier (Main server owner only)\n` +
+        `• \`${currentPrefix}aeventnpcxp\` / \`${currentPrefix}aen [mult] [time]\` — NPC EXP event (Main server owner only)`
       ))
     );
     return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
