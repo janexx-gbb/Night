@@ -42,7 +42,7 @@ function loadCommandModule(filename) {
 
 const economyModule = loadCommandModule('economycommands.js');
 const npcModule = loadCommandModule('npccommands.js');
-const adminModule = loadCommandModule('admincommand.js');
+const adminModule = loadCommandModule('admincommands.js');
 
 const client = new Client({
   intents: [
