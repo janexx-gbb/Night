@@ -10,6 +10,7 @@ const {
 
 const { db } = require('../core/database');
 const {
+  ensureUser,
   toSmallCaps,
   updateUserRank,
   evaluateAndSyncUserBadges,
@@ -130,15 +131,22 @@ const RARITY_SELL_VALUES = {
   SSRP: 50000
 };
 
+function ensureEconomyDbShapes() {
+  if (!db.config || typeof db.config !== 'object') db.config = {};
+  if (typeof db.config.lotteryPool !== 'number' || Number.isNaN(db.config.lotteryPool)) {
+    db.config.lotteryPool = 5000;
+  }
+  if (!Array.isArray(db.config.lotteryEntries)) {
+    db.config.lotteryEntries = [];
+  }
+}
+
 function isPhEventActive(nowMs = Date.now()) {
   return nowMs <= PH_EVENT_END_MS;
 }
 
 function getAvailableJobs(nowMs = Date.now()) {
-  if (isPhEventActive(nowMs)) {
-    return [...BASE_JOBS, ...PH_EVENT_JOBS];
-  }
-  return [...BASE_JOBS];
+  return isPhEventActive(nowMs) ? [...BASE_JOBS, ...PH_EVENT_JOBS] : [...BASE_JOBS];
 }
 
 function findJobByQuery(query, nowMs = Date.now()) {
@@ -403,6 +411,7 @@ async function execute({
   if (!ECONOMY_COMMANDS.includes(command)) return false;
 
   const nowMs = Date.now() || currentMs;
+  ensureEconomyDbShapes();
   ensureEconomyFields(user, nowMs);
 
   // JOB / JOBS selector
@@ -432,7 +441,7 @@ async function execute({
     return true;
   }
 
-  // 1. WORK: Only checks if user already has a work or opens the UI to choose one (no cash payout)
+  // 1. WORK
   if (command === 'work') {
     if (args.length > 0) {
       const requestedJob = findJobByQuery(args.join(' '), nowMs);
@@ -511,13 +520,13 @@ async function execute({
     return true;
   }
 
-  // 2. WORKING: Working every 2 minutes (does NOT shift the work)
+  // 2. WORKING
   if (command === 'working') {
     const subArg = (args[0] || '').toLowerCase();
 
     if (subArg === 'stop' || subArg === 'off') {
       if (!user.workingLoop) {
-        return message.reply(toSmallCaps(`ℹ️ You are not currently working on a 2m loop.`));
+        return message.reply(toSmallCaps('ℹ️ You are not currently working on a 2m loop.'));
       }
       const loopJob = getAvailableJobs(nowMs).find(j => j.id === user.workingLoop.jobId) || getSelectedJob(user, nowMs);
       const elapsed = Math.max(0, nowMs - Number(user.workingLoop.lastTickAt || user.workingLoop.startedAt || nowMs));
@@ -553,7 +562,7 @@ async function execute({
         currentPrefix,
         nowMs,
         saveUsers,
-        '⚠️ Choose your work first before running `-working`:'
+        `⚠️ Choose your work first before running \`${currentPrefix}working\`:`
       );
       return true;
     }
@@ -607,7 +616,7 @@ async function execute({
     ));
   }
 
-  // 3. WORKSHIFT: Shifting the work you choose (+ 1d cooldown if choosing that same work again)
+  // 3. WORKSHIFT
   if (command === 'workshift') {
     if (args.length > 0) {
       const requestedJob = findJobByQuery(args.join(' '), nowMs);
@@ -1000,12 +1009,6 @@ async function execute({
   // 10. LOTTERY
   if (command === 'lottery') {
     const sub = (args[0] || '').toLowerCase();
-    if (!db.config.lotteryPool || typeof db.config.lotteryPool !== 'number') {
-      db.config.lotteryPool = 5000;
-    }
-    if (!Array.isArray(db.config.lotteryEntries)) {
-      db.config.lotteryEntries = [];
-    }
 
     if (sub === 'draw') {
       if (db.config.lotteryEntries.length === 0) {
@@ -1016,10 +1019,11 @@ async function execute({
       db.config.lotteryEntries = [];
       db.config.lotteryPool = 5000;
 
-      if (winnerId === userId) {
-        user.cash += jackpot;
-      }
-      updateUserRank(user);
+      ensureUser(winnerId);
+      ensureEconomyFields(db.users[winnerId], nowMs);
+      db.users[winnerId].cash += jackpot;
+      if (typeof trackPeakPoints === 'function') trackPeakPoints(db.users[winnerId]);
+      updateUserRank(db.users[winnerId]);
       await saveUsers();
 
       return message.reply(toSmallCaps(
