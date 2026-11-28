@@ -239,7 +239,9 @@ async function execute(ctx) {
 
     const mult = Number.parseFloat(args[0]);
     if (Number.isNaN(mult) || mult <= 0) {
-      return message.reply(toSmallCaps(`❌ Usage: \`${currentPrefix}${command} [exp multiplier] [optional duration like 30m, 1h]\``));
+      return message.reply(
+        toSmallCaps(`❌ Usage: \`${currentPrefix}${command} [exp multiplier] [optional duration like 30m, 1h]\``)
+      );
     }
 
     let expiresAt = 0;
@@ -354,7 +356,9 @@ async function execute(ctx) {
     const resolvedKey = resolveCatalogBadgeKey(badgeKeyArg);
     const badgeDef = resolvedKey ? BADGE_CATALOG[resolvedKey] : null;
     if (!badgeDef) {
-      return message.reply(toSmallCaps(`❌ Unknown badge key \`${badgeKeyArg}\`! Type \`${currentPrefix}agb\` with no arguments to see all valid badge keys.`));
+      return message.reply(
+        toSmallCaps(`❌ Unknown badge key \`${badgeKeyArg}\`! Type \`${currentPrefix}agb\` with no arguments to see all valid badge keys.`)
+      );
     }
 
     ensureUser(target.id);
@@ -368,14 +372,18 @@ async function execute(ctx) {
 
     await syncUserBadgesSafe(target.id, targetData, message.guild);
     await saveUsers();
-    return message.reply(toSmallCaps(`✅ ${exists ? 'Removed' : 'Granted'} ${badgeDef.icon} **${badgeDef.name}** ${exists ? 'from' : 'to'} <@${target.id}>!`));
+    return message.reply(
+      toSmallCaps(`✅ ${exists ? 'Removed' : 'Granted'} ${badgeDef.icon} **${badgeDef.name}** ${exists ? 'from' : 'to'} <@${target.id}>!`)
+    );
   }
 
   if (command === 'pubnewupd') {
     if (!isAdmin()) return message.reply(toSmallCaps('❌ Only the bot owner or admins can publish updates!'));
     const pendingCount = db.config.pendingUpdatesCount || 0;
     if (db.config.featuresPublished === true && pendingCount === 0) {
-      return message.reply(toSmallCaps('ℹ️ There is no new code or updates to publish right now. Everything is already fully up-to-date and live for public production!'));
+      return message.reply(
+        toSmallCaps('ℹ️ There is no new code or updates to publish right now. Everything is already fully up-to-date and live for public production!')
+      );
     }
 
     const confirmRow = new ActionRowBuilder().addComponents(
@@ -397,7 +405,10 @@ async function execute(ctx) {
       }
       decided = true;
       if (i.customId === 'pubnewupd_confirm_no') {
-        return confirmMsg.edit({ content: toSmallCaps('❌ Update publishing cancelled. Unreleased features remain exclusive to beta testers.'), components: [] }).catch(() => {});
+        return confirmMsg.edit({
+          content: toSmallCaps('❌ Update publishing cancelled. Unreleased features remain exclusive to beta testers.'),
+          components: []
+        }).catch(() => {});
       }
       db.config.featuresPublished = true;
       db.config.pendingUpdatesCount = 0;
@@ -467,6 +478,9 @@ async function execute(ctx) {
         `• \`${currentPrefix}admingiveitem [@user] [item] [qty]\` — Grant items or dice\n` +
         `• \`${currentPrefix}adminsetnn [@user] [name]\` — Set custom user nickname\n` +
         `• \`${currentPrefix}adminclearlb\` — Clear leaderboard data\n` +
+        `• \`${currentPrefix}asnlvl [Npc ID] [1-100] [@user]\` — Set NPC level *(Owner, main server)*\n` +
+        `• \`${currentPrefix}ast [Npc ID] [Tier] [@user]\` — Set NPC tier *(Owner, main server)*\n` +
+        `• \`${currentPrefix}aeventnpcxp\` (\`${currentPrefix}aen\`) \`[mult] [time]\` — NPC EXP event *(Owner, main server)*\n` +
         `• \`${currentPrefix}admingivepermission [@user]\` — Grant admin rights *(Owner only)*`
       ))
     );
@@ -477,7 +491,9 @@ async function execute(ctx) {
     if (!isOwner()) return message.reply(toSmallCaps('❌ Only the bot owner can toggle maintenance mode!'));
     db.config.maintenanceMode = !db.config.maintenanceMode;
     await saveUsers();
-    const statusText = db.config.maintenanceMode ? 'ENABLED 🔴 (Bot locked for maintenance)' : 'DISABLED 🟢 (Bot is fully operational)';
+    const statusText = db.config.maintenanceMode
+      ? 'ENABLED 🔴 (Bot locked for maintenance)'
+      : 'DISABLED 🟢 (Bot is fully operational)';
     return message.reply(toSmallCaps(`🛠️ Maintenance mode successfully updated: ${statusText}`));
   }
 
@@ -486,7 +502,9 @@ async function execute(ctx) {
     const target = message.mentions.users.first();
     const statusText = args.slice(1).join(' ');
     if (!target || !statusText) {
-      return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}ownersetstatus [@user] [status text]\nExample: ${currentPrefix}ownersetstatus @user VALORANT`));
+      return message.reply(
+        toSmallCaps(`❌ Usage: ${currentPrefix}ownersetstatus [@user] [status text]\nExample: ${currentPrefix}ownersetstatus @user VALORANT`)
+      );
     }
     ensureUser(target.id);
     db.users[target.id].customStatus = { text: statusText, timestamp: Date.now() };
@@ -505,7 +523,9 @@ async function execute(ctx) {
       restoredCount++;
     }
     await saveUsers();
-    return message.reply(toSmallCaps(`🔄 Successfully restored and synchronized data profiles for all **${restoredCount}** registered users!`));
+    return message.reply(
+      toSmallCaps(`🔄 Successfully restored and synchronized data profiles for all **${restoredCount}** registered users!`)
+    );
   }
 
   if (command === 'ownerresetdata') {
@@ -551,7 +571,9 @@ async function execute(ctx) {
     db.tradeHistories = {};
     db.config.eventCrystals = {};
     await saveUsers();
-    return message.reply(toSmallCaps('⚠️ OWNER NOTICE: All user data, inventories, teams, and stats have been completely reset! All users must use `+start` again.'));
+    return message.reply(
+      toSmallCaps('⚠️ OWNER NOTICE: All user data, inventories, teams, and stats have been completely reset! All users must use `+start` again.')
+    );
   }
 
   if (command === 'fixadmin') {
@@ -560,7 +582,9 @@ async function execute(ctx) {
     user.permissions = true;
     await syncUserBadgesSafe(userId, user, message.guild);
     await saveUsers();
-    return message.reply(toSmallCaps(`🛡️ Admin override successful! You are now set as the Bot Owner & Admin, and this server (${message.guild ? message.guild.name : 'DM'}) is locked as the Main Server.`));
+    return message.reply(
+      toSmallCaps(`🛡️ Admin override successful! You are now set as the Bot Owner & Admin, and this server (${message.guild ? message.guild.name : 'DM'}) is locked as the Main Server.`)
+    );
   }
 
   if (command === 'ownersecretpanel') {
@@ -583,19 +607,28 @@ async function execute(ctx) {
     const target = message.mentions.users.first();
     const rarityArg = args[1]?.toUpperCase();
     if (!target || !rarityArg) {
-      return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}ownergivechibi [@user] [rarity] (e.g. ${currentPrefix}ownergivechibi @user SSRP)`));
+      return message.reply(
+        toSmallCaps(`❌ Usage: ${currentPrefix}ownergivechibi [@user] [rarity] (e.g. ${currentPrefix}ownergivechibi @user SSRP)`)
+      );
     }
     ensureUser(target.id);
 
     const row = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder().setCustomId('owner_give_chibi_select').setPlaceholder(toSmallCaps('Select chibi to give')).addOptions(
-        EVENT_CHIBIS_POOL.map(c => ({ label: `${c.name} (${c.rarity})`.slice(0, 100), value: c.id }))
-      )
+      new StringSelectMenuBuilder()
+        .setCustomId('owner_give_chibi_select')
+        .setPlaceholder(toSmallCaps('Select chibi to give'))
+        .addOptions(
+          EVENT_CHIBIS_POOL.map(c => ({ label: `${c.name} (${c.rarity})`.slice(0, 100), value: c.id }))
+        )
     );
-    const promptMsg = await message.reply({ content: toSmallCaps(`🎁 Select which event chibi to gift to <@${target.id}>:`), components: [row] });
+    const promptMsg = await message.reply({
+      content: toSmallCaps(`🎁 Select which event chibi to gift to <@${target.id}>:`),
+      components: [row]
+    });
 
     const selection = await message.channel.awaitMessageComponent({
-      filter: int => int.user.id === userId && int.customId === 'owner_give_chibi_select', time: 25000
+      filter: int => int.user.id === userId && int.customId === 'owner_give_chibi_select',
+      time: 25000
     }).catch(() => null);
     if (!selection) return promptMsg.edit({ content: toSmallCaps('❌ Chibi giveaway timed out.'), components: [] }).catch(() => {});
     if (!selection.deferred && !selection.replied) await selection.deferUpdate().catch(() => {});
@@ -610,7 +643,10 @@ async function execute(ctx) {
     });
     await syncUserBadgesSafe(target.id, db.users[target.id], message.guild);
     await saveUsers();
-    return promptMsg.edit({ content: toSmallCaps(`✅ Successfully gifted ${template.emoji} **${template.name}** (SSRP) to <@${target.id}>!`), components: [] }).catch(() => {});
+    return promptMsg.edit({
+      content: toSmallCaps(`✅ Successfully gifted ${template.emoji} **${template.name}** (SSRP) to <@${target.id}>!`),
+      components: []
+    }).catch(() => {});
   }
 
   if (command === 'adminsetclanrewards') {
@@ -620,7 +656,9 @@ async function execute(ctx) {
     const rarity = args[2]?.toUpperCase();
     const emoji = args[3];
     if (![1, 2, 3].includes(rankPos) || isNaN(qty) || !rarity || !emoji) {
-      return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}adminsetclanrewards [1|2|3] [qty] [rarity] [Emoji]\nExample: ${currentPrefix}adminsetclanrewards 1 5 UTR 🌟`));
+      return message.reply(
+        toSmallCaps(`❌ Usage: ${currentPrefix}adminsetclanrewards [1|2|3] [qty] [rarity] [Emoji]\nExample: ${currentPrefix}adminsetclanrewards 1 5 UTR 🌟`)
+      );
     }
     db.config.clanRewards[rankPos] = { qty, rarity, chibiEmoji: emoji };
     await saveUsers();
@@ -647,7 +685,9 @@ async function execute(ctx) {
     }
     const newPrefix = args[0];
     if (!newPrefix || newPrefix.length > 5 || /^[a-zA-Z]$/.test(newPrefix)) {
-      return message.reply(toSmallCaps(`❌ Please provide a valid symbol prefix (max 5 chars, single letters like 's' or 'a' are not allowed). Usage: ${currentPrefix}prefixchange [new_prefix]`));
+      return message.reply(
+        toSmallCaps(`❌ Please provide a valid symbol prefix (max 5 chars, single letters like 's' or 'a' are not allowed). Usage: ${currentPrefix}prefixchange [new_prefix]`)
+      );
     }
     db.guildPrefixes[guildId] = newPrefix;
     await saveUsers();
@@ -718,7 +758,9 @@ async function execute(ctx) {
       ensureUser(target.id);
       db.config.eventCrystals[target.id] = (db.config.eventCrystals[target.id] || 0) + amount;
       await saveUsers();
-      return message.reply(toSmallCaps(`🛡️ Successfully granted ${amount.toLocaleString()} Event Crystals ${EVENT_ICONS.CRYSTAL} to <@${target.id}>.`));
+      return message.reply(
+        toSmallCaps(`🛡️ Successfully granted ${amount.toLocaleString()} Event Crystals ${EVENT_ICONS.CRYSTAL} to <@${target.id}>.`)
+      );
     }
 
     if (command === 'adminsetlbseason') {
