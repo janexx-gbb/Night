@@ -27,6 +27,17 @@ const ADMIN_CMDS = [
 
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
+function ensureAdminDbShapes() {
+  if (!db.config || typeof db.config !== 'object') db.config = {};
+  if (!db.clans || typeof db.clans !== 'object') db.clans = {};
+  if (!db.tradeHistories || typeof db.tradeHistories !== 'object') db.tradeHistories = {};
+  if (!db.bannedUsers || typeof db.bannedUsers !== 'object') db.bannedUsers = {};
+  if (!db.channelRestrictions || typeof db.channelRestrictions !== 'object') db.channelRestrictions = {};
+  if (!db.guildPrefixes || typeof db.guildPrefixes !== 'object') db.guildPrefixes = {};
+  if (!db.config.eventCrystals || typeof db.config.eventCrystals !== 'object') db.config.eventCrystals = {};
+  if (!db.config.clanRewards || typeof db.config.clanRewards !== 'object') db.config.clanRewards = {};
+}
+
 function resolveCatalogBadgeKey(rawKey) {
   if (!rawKey || typeof rawKey !== 'string') return null;
   const cleaned = rawKey.trim().toLowerCase();
@@ -38,8 +49,7 @@ function resolveCatalogBadgeKey(rawKey) {
     creator: 'developer'
   };
   const mapped = aliases[cleaned];
-  if (mapped && BADGE_CATALOG?.[mapped]) return mapped;
-  return null;
+  return mapped && BADGE_CATALOG?.[mapped] ? mapped : null;
 }
 
 async function syncUserBadgesSafe(targetId, targetData, guild) {
@@ -66,7 +76,7 @@ function formatBadgeCatalogLines(categoryName) {
 
 function isOwnerInMainServer(message, userId, isOwner) {
   if (!message?.guild) return false;
-  if (!db.config || typeof db.config !== 'object') db.config = {};
+  ensureAdminDbShapes();
   if (!db.config.ownerId) db.config.ownerId = userId;
   if (!db.config.mainGuildId) db.config.mainGuildId = message.guild.id;
 
@@ -111,10 +121,22 @@ function buildNpcTierListText(prefix, npcIdHint = '[Npc ID]') {
 }
 
 async function execute(ctx) {
-  const { command, args, message, client, userId, guildId, currentPrefix, user, isOwner, isAdmin } = ctx;
+  const { command, args, message, client, userId, guildId, currentPrefix, user } = ctx;
   if (!ADMIN_CMDS.includes(command)) return false;
 
-  // +asnlvl [Npc ID] [level 100 is maximum] [@user] — Owner + Main Server ONLY
+  ensureAdminDbShapes();
+
+  const isOwner = typeof ctx.isOwner === 'function'
+    ? ctx.isOwner
+    : () => {
+        if (!db.config.ownerId) db.config.ownerId = userId;
+        return userId === db.config.ownerId;
+      };
+
+  const isAdmin = typeof ctx.isAdmin === 'function'
+    ? ctx.isAdmin
+    : () => isOwner() || user?.permissions === true;
+
   if (command === 'asnlvl') {
     if (!isOwnerInMainServer(message, userId, isOwner)) {
       return message.reply(toSmallCaps('❌ Only the bot owner can use this command in the main server!'));
@@ -127,9 +149,7 @@ async function execute(ctx) {
     const maxLvl = MAX_LEVEL || 100;
 
     if (!npcIdArg || Number.isNaN(levelArg) || levelArg < 1 || levelArg > maxLvl) {
-      return message.reply(
-        toSmallCaps(`❌ Usage: \`${currentPrefix}asnlvl [Npc ID] [level 1–${maxLvl}] [@user]\``)
-      );
+      return message.reply(toSmallCaps(`❌ Usage: \`${currentPrefix}asnlvl [Npc ID] [level 1–${maxLvl}] [@user]\``));
     }
 
     const targetDiscordUser = mentionedUser || message.author;
@@ -138,9 +158,7 @@ async function execute(ctx) {
     const npc = resolveTargetNpc(targetData, npcIdArg);
 
     if (!npc) {
-      return message.reply(
-        toSmallCaps(`❌ NPC with ID \`${npcIdArg}\` not found for <@${targetDiscordUser.id}>!`)
-      );
+      return message.reply(toSmallCaps(`❌ NPC with ID \`${npcIdArg}\` not found for <@${targetDiscordUser.id}>!`));
     }
 
     npc.level = levelArg;
@@ -148,12 +166,11 @@ async function execute(ctx) {
     await saveUsers();
 
     return message.reply(
-      toSmallCaps(`👑 Set `) + `**${npc.name}**` +
+      toSmallCaps('👑 Set ') + `**${npc.name}**` +
       toSmallCaps(` (ID \`${npc.slotId}\` • <@${targetDiscordUser.id}>) to **Level ${npc.level}**!`)
     );
   }
 
-  // +ast [Npc ID] [Tier] [@user] — Owner + Main Server ONLY
   if (command === 'ast') {
     if (!isOwnerInMainServer(message, userId, isOwner)) {
       return message.reply(toSmallCaps('❌ Only the bot owner can use this command in the main server!'));
@@ -192,9 +209,7 @@ async function execute(ctx) {
     const npc = resolveTargetNpc(targetData, npcIdArg);
 
     if (!npc) {
-      return message.reply(
-        toSmallCaps(`❌ NPC with ID \`${npcIdArg}\` not found for <@${targetDiscordUser.id}>!`)
-      );
+      return message.reply(toSmallCaps(`❌ NPC with ID \`${npcIdArg}\` not found for <@${targetDiscordUser.id}>!`));
     }
 
     npc.tier = tierDef.name;
@@ -205,12 +220,11 @@ async function execute(ctx) {
     await saveUsers();
 
     return message.reply(
-      toSmallCaps(`👑 Set `) + `**${npc.name}**` +
+      toSmallCaps('👑 Set ') + `**${npc.name}**` +
       toSmallCaps(` (ID \`${npc.slotId}\` • <@${targetDiscordUser.id}>) tier to **${tierDef.name}**!`)
     );
   }
 
-  // +aeventnpcxp or +aen [exp multiplier] [duration] — Owner + Main Server ONLY
   if (command === 'aeventnpcxp' || command === 'aen') {
     if (!isOwnerInMainServer(message, userId, isOwner)) {
       return message.reply(toSmallCaps('❌ Only the bot owner can use this command in the main server!'));
@@ -225,9 +239,7 @@ async function execute(ctx) {
 
     const mult = Number.parseFloat(args[0]);
     if (Number.isNaN(mult) || mult <= 0) {
-      return message.reply(
-        toSmallCaps(`❌ Usage: \`${currentPrefix}${command} [exp multiplier] [optional duration like 30m, 1h]\``)
-      );
+      return message.reply(toSmallCaps(`❌ Usage: \`${currentPrefix}${command} [exp multiplier] [optional duration like 30m, 1h]\``));
     }
 
     let expiresAt = 0;
@@ -251,11 +263,11 @@ async function execute(ctx) {
   }
 
   if (command === 'addtester') {
-    if (!isOwner() && !user.permissions) return message.reply(toSmallCaps('❌ Only bot owners or admins can manage testers!'));
+    if (!isAdmin()) return message.reply(toSmallCaps('❌ Only bot owners or admins can manage testers!'));
     const target = message.mentions.users.first();
     if (!target) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}addtester [@user]`));
     ensureUser(target.id);
-    if (!db.config.testers) db.config.testers = [];
+    if (!Array.isArray(db.config.testers)) db.config.testers = [];
     if (!db.config.testers.includes(target.id)) {
       db.config.testers.push(target.id);
       if (BADGE_CATALOG?.tester && !db.users[target.id].badges.includes('tester')) {
@@ -269,10 +281,10 @@ async function execute(ctx) {
   }
 
   if (command === 'removetester') {
-    if (!isOwner() && !user.permissions) return message.reply(toSmallCaps('❌ Only bot owners or admins can manage testers!'));
+    if (!isAdmin()) return message.reply(toSmallCaps('❌ Only bot owners or admins can manage testers!'));
     const target = message.mentions.users.first();
     if (!target) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}removetester [@user]`));
-    if (db.config.testers) {
+    if (Array.isArray(db.config.testers)) {
       db.config.testers = db.config.testers.filter(id => id !== target.id);
     }
     if (db.users[target.id] && Array.isArray(db.users[target.id].badges)) {
@@ -321,23 +333,19 @@ async function execute(ctx) {
   }
 
   if (command === 'admingivebadges') {
-    if (!isOwner() && !user.permissions) return message.reply(toSmallCaps('❌ Only the bot owner or admins can use this command!'));
+    if (!isAdmin()) return message.reply(toSmallCaps('❌ Only the bot owner or admins can use this command!'));
     const target = message.mentions.users.first();
     const badgeKeyArg = args[1] ? args[1].toLowerCase() : null;
 
     if (!target || !badgeKeyArg) {
-      const obtainableLines = formatBadgeCatalogLines('Obtainable Badges');
-      const utilityLines = formatBadgeCatalogLines('Utility Badges');
-      const eventLines = formatBadgeCatalogLines('Event Badges');
-
       const container = new ContainerBuilder().setAccentColor(0x9b59b6).addTextDisplayComponents(
         new TextDisplayBuilder().setContent(
           toSmallCaps(`# 🏅 Available Badges Catalog (\`${currentPrefix}admingivebadges\` / \`${currentPrefix}agb\`)\n\n**Usage:** \`${currentPrefix}admingivebadges [@user] [badge_key]\`\n\n**Obtainable Badges:**\n`) +
-          obtainableLines +
+          formatBadgeCatalogLines('Obtainable Badges') +
           toSmallCaps('\n\n**Utility Badges:**\n') +
-          utilityLines +
+          formatBadgeCatalogLines('Utility Badges') +
           toSmallCaps('\n\n**Event Badges:**\n') +
-          eventLines
+          formatBadgeCatalogLines('Event Badges')
         )
       );
       return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
@@ -353,21 +361,18 @@ async function execute(ctx) {
     const targetData = db.users[target.id];
     if (!Array.isArray(targetData.badges)) targetData.badges = [];
 
-    let actionText = '';
-    if (targetData.badges.includes(badgeDef.key)) {
-      targetData.badges = targetData.badges.filter(k => k !== badgeDef.key);
-      actionText = `Removed ${badgeDef.icon} **${badgeDef.name}** from <@${target.id}>.`;
-    } else {
-      targetData.badges.push(badgeDef.key);
-      actionText = `Granted ${badgeDef.icon} **${badgeDef.name}** to <@${target.id}>!`;
-    }
+    const exists = targetData.badges.includes(badgeDef.key);
+    targetData.badges = exists
+      ? targetData.badges.filter(k => k !== badgeDef.key)
+      : [...targetData.badges, badgeDef.key];
+
     await syncUserBadgesSafe(target.id, targetData, message.guild);
     await saveUsers();
-    return message.reply(toSmallCaps(`✅ ${actionText}`));
+    return message.reply(toSmallCaps(`✅ ${exists ? 'Removed' : 'Granted'} ${badgeDef.icon} **${badgeDef.name}** ${exists ? 'from' : 'to'} <@${target.id}>!`));
   }
 
   if (command === 'pubnewupd') {
-    if (!isOwner() && !user.permissions) return message.reply(toSmallCaps('❌ Only the bot owner or admins can publish updates!'));
+    if (!isAdmin()) return message.reply(toSmallCaps('❌ Only the bot owner or admins can publish updates!'));
     const pendingCount = db.config.pendingUpdatesCount || 0;
     if (db.config.featuresPublished === true && pendingCount === 0) {
       return message.reply(toSmallCaps('ℹ️ There is no new code or updates to publish right now. Everything is already fully up-to-date and live for public production!'));
@@ -392,23 +397,20 @@ async function execute(ctx) {
       }
       decided = true;
       if (i.customId === 'pubnewupd_confirm_no') {
-        await confirmMsg.edit({ content: toSmallCaps('❌ Update publishing cancelled. Unreleased features remain exclusive to beta testers.'), components: [] }).catch(() => {});
-        return;
+        return confirmMsg.edit({ content: toSmallCaps('❌ Update publishing cancelled. Unreleased features remain exclusive to beta testers.'), components: [] }).catch(() => {});
       }
-      if (i.customId === 'pubnewupd_confirm_yes') {
-        db.config.featuresPublished = true;
-        db.config.pendingUpdatesCount = 0;
-        await saveUsers();
-        const container = new ContainerBuilder().setAccentColor(0x2ecc71).addTextDisplayComponents(
-          new TextDisplayBuilder().setContent(toSmallCaps(
-            `# 🚀 New Updates Published Successfully!\n\n` +
-            `All recent tester features and updates have been automatically pushed to public production.\n` +
-            `• Status: **LIVE FOR ALL USERS** 🟢\n` +
-            `• Published by: <@${userId}>`
-          ))
-        );
-        await confirmMsg.edit({ content: '', components: [container], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
-      }
+      db.config.featuresPublished = true;
+      db.config.pendingUpdatesCount = 0;
+      await saveUsers();
+      const container = new ContainerBuilder().setAccentColor(0x2ecc71).addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(toSmallCaps(
+          `# 🚀 New Updates Published Successfully!\n\n` +
+          `All recent tester features and updates have been automatically pushed to public production.\n` +
+          `• Status: **LIVE FOR ALL USERS** 🟢\n` +
+          `• Published by: <@${userId}>`
+        ))
+      );
+      await confirmMsg.edit({ content: '', components: [container], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
     });
 
     pubCollector.on('end', async () => {
@@ -515,6 +517,7 @@ async function execute(ctx) {
         joinedDate: new Date(resetNow).toLocaleDateString(),
         firstPlayedAt: resetNow,
         dice: 10,
+        cash: 0,
         points: 0,
         rank: '<:unranked:1571314276071907519>',
         clan: null,
@@ -535,7 +538,7 @@ async function execute(ctx) {
         todayDrops: 0,
         lastDaily: 0,
         streak: 0,
-        permissions: (uId === db.config.ownerId ? true : false),
+        permissions: uId === db.config.ownerId,
         customStatus: null,
         badges: [],
         clanMail: [],
@@ -546,7 +549,7 @@ async function execute(ctx) {
     }
     db.clans = {};
     db.tradeHistories = {};
-    if (db.config.eventCrystals) db.config.eventCrystals = {};
+    db.config.eventCrystals = {};
     await saveUsers();
     return message.reply(toSmallCaps('⚠️ OWNER NOTICE: All user data, inventories, teams, and stats have been completely reset! All users must use `+start` again.'));
   }
@@ -572,7 +575,7 @@ async function execute(ctx) {
         `Use your designated admin/owner commands safely.`
       ))
     );
-    return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2, ephemeral: true });
+    return message.reply({ components: [container], flags: MessageFlags.IsComponentsV2 });
   }
 
   if (command === 'ownergivechibi') {
@@ -619,7 +622,6 @@ async function execute(ctx) {
     if (![1, 2, 3].includes(rankPos) || isNaN(qty) || !rarity || !emoji) {
       return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}adminsetclanrewards [1|2|3] [qty] [rarity] [Emoji]\nExample: ${currentPrefix}adminsetclanrewards 1 5 UTR 🌟`));
     }
-    if (!db.config.clanRewards) db.config.clanRewards = {};
     db.config.clanRewards[rankPos] = { qty, rarity, chibiEmoji: emoji };
     await saveUsers();
     return message.reply(toSmallCaps(`✅ Successfully updated Rank ${rankPos} clan reward to ${qty}x ${rarity} (${emoji})!`));
@@ -652,28 +654,22 @@ async function execute(ctx) {
     return message.reply(toSmallCaps(`✅ Successfully updated server prefix to \`${newPrefix}\`! Use ${newPrefix}help for commands.`));
   }
 
-  if (command === 'enablec') {
+  if (command === 'enablec' || command === 'disablec') {
     if (!message.guild) return message.reply(toSmallCaps('❌ This command can only be used inside a server.'));
     if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return message.reply(toSmallCaps('❌ You must have Administrator permissions to manage channel restrictions.'));
     }
-    if (!db.channelRestrictions[guildId]) db.channelRestrictions[guildId] = [];
-    const index = db.channelRestrictions[guildId].indexOf(message.channel.id);
-    if (index !== -1) {
-      db.channelRestrictions[guildId].splice(index, 1);
-      await saveUsers();
+    const list = (db.channelRestrictions[guildId] ||= []);
+    const idx = list.indexOf(message.channel.id);
+    if (command === 'enablec') {
+      if (idx !== -1) {
+        list.splice(idx, 1);
+        await saveUsers();
+      }
+      return message.reply(toSmallCaps(`✅ Chibi bot commands are now enabled in <#${message.channel.id}>.`));
     }
-    return message.reply(toSmallCaps(`✅ Chibi bot commands are now enabled in <#${message.channel.id}>.`));
-  }
-
-  if (command === 'disablec') {
-    if (!message.guild) return message.reply(toSmallCaps('❌ This command can only be used inside a server.'));
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return message.reply(toSmallCaps('❌ You must have Administrator permissions to manage channel restrictions.'));
-    }
-    if (!db.channelRestrictions[guildId]) db.channelRestrictions[guildId] = [];
-    if (!db.channelRestrictions[guildId].includes(message.channel.id)) {
-      db.channelRestrictions[guildId].push(message.channel.id);
+    if (idx === -1) {
+      list.push(message.channel.id);
       await saveUsers();
     }
     return message.reply(toSmallCaps(`❌ Chibi bot commands are now disabled in <#${message.channel.id}>.`));
@@ -689,16 +685,29 @@ async function execute(ctx) {
     return message.reply(toSmallCaps(`🛡️ Admin permissions successfully removed from <@${target.id}>.`));
   }
 
+  if (command === 'admingivepermission') {
+    if (!isOwner()) return message.reply(toSmallCaps('❌ Only the bot owner can assign admin permissions!'));
+    const target = message.mentions.users.first();
+    if (!target) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}admingivepermission [@user]`));
+    ensureUser(target.id);
+    db.users[target.id].permissions = true;
+    await syncUserBadgesSafe(target.id, db.users[target.id], message.guild);
+    await saveUsers();
+    return message.reply(toSmallCaps(`🛡️ Admin permissions granted to <@${target.id}>.`));
+  }
+
   if (command.startsWith('admin')) {
+    if (!isAdmin()) {
+      return message.reply(toSmallCaps('❌ Only administrators can use this command!'));
+    }
+
     if (!message.guild) {
       return message.reply('You cannot use this Admin power in your own server, you must in the main server to run this.');
     }
     if (!db.config.ownerId) db.config.ownerId = userId;
     if (!db.config.mainGuildId) db.config.mainGuildId = message.guild.id;
 
-    const isUserOwner = userId === db.config.ownerId || user.permissions === true;
-    const isMainServer = message.guild.id === db.config.mainGuildId;
-    if (!isUserOwner || !isMainServer) {
+    if (message.guild.id !== db.config.mainGuildId) {
       return message.reply('You cannot use this Admin power in your own server, you must in the main server to run this.');
     }
 
@@ -707,7 +716,6 @@ async function execute(ctx) {
       const amount = parseInt(args[1], 10);
       if (!target || isNaN(amount)) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}admingivecrystal [@user] [amount]`));
       ensureUser(target.id);
-      if (!db.config.eventCrystals) db.config.eventCrystals = {};
       db.config.eventCrystals[target.id] = (db.config.eventCrystals[target.id] || 0) + amount;
       await saveUsers();
       return message.reply(toSmallCaps(`🛡️ Successfully granted ${amount.toLocaleString()} Event Crystals ${EVENT_ICONS.CRYSTAL} to <@${target.id}>.`));
@@ -731,11 +739,10 @@ async function execute(ctx) {
     }
 
     if (command === 'adminsetnn') {
-      if (!isAdmin()) return message.reply(toSmallCaps('❌ Only administrators can use this command!'));
       const target = message.mentions.users.first();
-      const newNN = args.slice(1).join(' ');
+      const newNN = args.slice(1).join(' ').trim();
       if (!target || !newNN) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}adminsetnn [@user] [nickname]`));
-      if (!db.users[target.id] || !db.users[target.id].started) {
+      if (!db.users[target.id]?.started) {
         return message.reply(toSmallCaps('❌ User does not have Chibi RNG data or has not started yet!'));
       }
       if (newNN.length > 12) return message.reply(toSmallCaps('❌ Nickname cannot exceed 12 characters!'));
@@ -762,10 +769,10 @@ async function execute(ctx) {
     }
 
     if (command === 'adminclearlb') {
-      if (!isAdmin()) return message.reply(toSmallCaps('❌ Only administrators can clear the leaderboard!'));
       for (const uId of Object.keys(db.users)) {
         db.users[uId].points = 0;
         db.users[uId].highestSeasonPoints = 0;
+        updatePeakRank(db.users[uId]);
         db.users[uId].customNickname = null;
         updateUserRank(db.users[uId]);
       }
@@ -808,9 +815,9 @@ async function execute(ctx) {
       }
       ensureUser(target.id);
       if (!db.users[target.id].inventory.items) db.users[target.id].inventory.items = { spray: 0, clover: 0 };
-      if (itemType === 'dice') db.users[target.id].dice += quantity;
-      else if (itemType === 'spray') db.users[target.id].inventory.items.spray += quantity;
-      else if (itemType === 'clover') db.users[target.id].inventory.items.clover += quantity;
+      if (itemType === 'dice') db.users[target.id].dice = Number(db.users[target.id].dice || 0) + quantity;
+      else if (itemType === 'spray') db.users[target.id].inventory.items.spray = Number(db.users[target.id].inventory.items.spray || 0) + quantity;
+      else if (itemType === 'clover') db.users[target.id].inventory.items.clover = Number(db.users[target.id].inventory.items.clover || 0) + quantity;
       updateUserRank(db.users[target.id]);
       await saveUsers();
       return message.reply(toSmallCaps(`🎁 Admin granted ${quantity}x ${itemType} to <@${target.id}>.`));
@@ -818,7 +825,7 @@ async function execute(ctx) {
 
     if (command === 'adminsetrank') {
       const target = message.mentions.users.first();
-      const newRank = args.slice(1).join(' ');
+      const newRank = args.slice(1).join(' ').trim();
       if (!target || !newRank) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}adminsetrank [@user] [rank title]`));
       ensureUser(target.id);
       db.users[target.id].rank = newRank;
@@ -835,17 +842,6 @@ async function execute(ctx) {
       updateUserRank(db.users[target.id]);
       await saveUsers();
       return message.reply(toSmallCaps(`🛡️ Admin set points for <@${target.id}> to **${pts}** (Rank icon auto-updated).`));
-    }
-
-    if (command === 'admingivepermission') {
-      if (!isOwner()) return message.reply(toSmallCaps('❌ Only the bot owner can assign admin permissions!'));
-      const target = message.mentions.users.first();
-      if (!target) return message.reply(toSmallCaps(`❌ Usage: ${currentPrefix}admingivepermission [@user]`));
-      ensureUser(target.id);
-      db.users[target.id].permissions = true;
-      await syncUserBadgesSafe(target.id, db.users[target.id], message.guild);
-      await saveUsers();
-      return message.reply(toSmallCaps(`🛡️ Admin permissions granted to <@${target.id}>.`));
     }
 
     if (command === 'adminsetlevel') {
