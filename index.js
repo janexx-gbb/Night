@@ -236,7 +236,7 @@ function renderHelpMenuRow(selectedKey = null) {
 
 function getGuildPrefix(guildId) {
   ensureDbShapes();
-  let prefix = (guildId && db.guildPrefixes[guildId]) || '+';
+  const prefix = (guildId && db.guildPrefixes[guildId]) || '+';
   return /^[a-zA-Z]$/.test(prefix) ? '+' : prefix;
 }
 
@@ -1032,10 +1032,14 @@ client.on('messageCreate', async message => {
       const eventSection =
         `${rarityIconsMap['SSRP'] || '🌟'} **Super Special Rare Plus (SSRP - Beta Event)**\n` +
         `• Cat Event: Normal 1 in 500B | Shiny 1 in 1Qa\n• Doge Event: Normal 1 in 1T | Shiny 1 in 20Qa\n` +
-        `• Troll Event: Normal 1 in 30T | Shiny 1 in 50Qa\n• Frien Event: Normal 1 in 100T | Shiny 1 in 300Qa\n` +
-        `• Seren Event: Normal 1 in 500T | Shiny 1 in 750Qa\n• Hellkitty Event: Normal 1 in 5Qa | Shiny 1 in 15Qi\n` +
-        `• Mezz Event: Normal 1 in 75Qa | Shiny 1 in 500Qi\n• Ruru Event: Normal 1 in 250Qa | Shiny 1 in 10Sx\n` +
-        `• Zoprb Event: Normal 1 in 1Qi | Shiny 1 in 100Sx\n• Kazerb Event: Normal 1 in 500Qi | Shiny 1 in 50Sp\n` +
+        `• Troll Event: Normal 1 in 30T | Shiny 1 in 50Qa\n` +
+        `• Frien Event: Normal 1 in 100T | Shiny 1 in 300Qa\n` +
+        `• Seren Event: Normal 1 in 500T | Shiny 1 in 750Qa\n` +
+        `• Hellkitty Event: Normal 1 in 5Qa | Shiny 1 in 15Qi\n` +
+        `• Mezz Event: Normal 1 in 75Qa | Shiny 1 in 500Qi\n` +
+        `• Ruru Event: Normal 1 in 250Qa | Shiny 1 in 10Sx\n` +
+        `• Zoprb Event: Normal 1 in 1Qi | Shiny 1 in 100Sx\n` +
+        `• Kazerb Event: Normal 1 in 500Qi | Shiny 1 in 50Sp\n` +
         `• Georb Event: Normal 1 in 10Sp | Shiny 1 in 50No`;
 
       const container = new ContainerBuilder().setAccentColor(0x3498db).addTextDisplayComponents(
